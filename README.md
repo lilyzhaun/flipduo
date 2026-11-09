@@ -4,7 +4,7 @@
 
 FlipDuo is an LSPosed module and companion settings app for the cover screens of Xiaomi MIX Flip devices.
 
-This repository contains the production source and build files for **0.6.117**. The app's existing interface text is preserved in its original language.
+This repository contains the production source and build files for **0.6.118**. The app's existing interface text is preserved in its original language.
 
 ## Features
 
@@ -67,7 +67,7 @@ The public source distribution does not include private signing material, test s
 
 ## Source releases
 
-Use the source tag matching the APK version you received. The initial public source tag is [`v0.6.117`](https://github.com/lilyzhaun/flipduo/tree/v0.6.117).
+Use the source tag matching the APK version you received. The tag for this version is [`v0.6.118`](https://github.com/lilyzhaun/flipduo/tree/v0.6.118); the initial [`v0.6.117`](https://github.com/lilyzhaun/flipduo/tree/v0.6.117) source remains available.
 
 The public build configuration omits private instrumentation-test dependencies and local SDK paths. It contains the production sources needed to build this version, rather than a byte-for-byte reproduction of a publisher-signed APK.
 

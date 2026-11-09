@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.117** 的生产源码与必要构建文件，应用现有界面文案保留。
+FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.118** 的生产源码与必要构建文件，应用现有界面文案保留。
 
 ## 功能
 
@@ -61,7 +61,7 @@ app/build/outputs/apk/release/app-release-unsigned.apk
 
 ## 对应版本源码
 
-请使用与收到的APK版本相对应的源码标签。首个公开源码标签为 [`v0.6.117`](https://github.com/lilyzhaun/flipduo/tree/v0.6.117)。
+请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.118`](https://github.com/lilyzhaun/flipduo/tree/v0.6.118)，首个公开版本 [`v0.6.117`](https://github.com/lilyzhaun/flipduo/tree/v0.6.117) 的源码仍可获取。
 
 公开构建配置移除了私有仪器测试依赖和本机SDK路径，提供构建该版本所需的生产源码；它不承诺逐字节复现发布者签名后的APK。
 
