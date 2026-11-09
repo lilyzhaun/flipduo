@@ -25,8 +25,11 @@ public final class CoverGeometry {
             Resources res = overlay.createConfigurationContext(cover).getResources();
             int top = res.getDimensionPixelSize(res.getIdentifier("rounded_corner_radius_top", "dimen", OVERLAY));
             int bottom = res.getDimensionPixelSize(res.getIdentifier("rounded_corner_radius_bottom", "dimen", OVERLAY));
+            // Ruyi's OS3 ODM sets ro.vendor.mi_sf.secondary_display_orientation=2;
+            // bixi's actual outer DisplayDeviceInfo reports installOrientation=2.
+            // Keep each overlay's own radii: ruyi is 128/50, bixi is 130/50.
             if (top > 0 && bottom > 0 && top < COLUMN / 2 && bottom < COLUMN / 2)
-                return new CoverGeometry(top, bottom, "bixi".equals(Build.DEVICE) ? 2 : 0, "系统设备资源");
+                return new CoverGeometry(top, bottom, "bixi".equals(Build.DEVICE) || "ruyi".equals(Build.DEVICE) ? 2 : 0, "系统设备资源");
         } catch (Exception ignored) { /* The public outer-display API reports zero on this firmware. */ }
         // Values verified from this device's actual DevicesAndroidOverlay.apk, never applied to other devices.
         if ("bixi".equals(Build.DEVICE)) return new CoverGeometry(130, 50, 2, "MIX Flip 2 设备配置");
