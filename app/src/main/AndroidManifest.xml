@@ -1,0 +1,21 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <package android:name="org.lsposed.manager" />
+        <package android:name="com.miui.fliphome" />
+        <package android:name="com.android.systemui" />
+        <package android:name="com.miui.systemui.overlay.devices.android" />
+    </queries>
+    <application android:name=".FlipDuoApplication" android:label="FlipDuo" android:icon="@mipmap/ic_launcher" android:description="@string/module_description"
+        android:allowBackup="false" android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" /></intent-filter>
+        </activity>
+        <activity android:name=".SettingsActivity" android:exported="true" />
+        <provider android:name=".RuntimeProvider" android:authorities="com.flipduo.module.runtime" android:exported="true" />
+    </application>
+</manifest>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- These integration classes intentionally reflect into firmware APIs from
+         LSPosed host processes. Their ROM-specific contracts are checked by the
+         module. Keep all other lint checks, including those in the manager app. -->
+    <issue id="BlockedPrivateApi">
+        <ignore path="native-hook/src/com/flipduo/module/BlurFillSource.java" />
+        <ignore path="native-hook/src/com/flipduo/module/MiniWindowBridge.java" />
+        <ignore path="native-hook/src/com/flipduo/module/NativeModule.java" />
+        <ignore path="native-hook/src/com/flipduo/module/NativeNavigation.java" />
+        <ignore path="native-hook/src/com/flipduo/module/PreviousApp.java" />
+    </issue>
+</lint>

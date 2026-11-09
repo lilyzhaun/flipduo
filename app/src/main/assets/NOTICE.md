@@ -1,0 +1,11 @@
+# Third-party notices and attribution
+
+FlipDuo includes GPL-3.0-only-derived interface code and AGPL-3.0-only adaptations. GPLv3 section 13 and AGPLv3 section 13 permit this combination. Each portion retains its applicable license, and AGPLv3's remote-network-interaction requirements apply to the combination where applicable. Existing file-level copyright and license notices are retained.
+
+- **miuix 0.9.3:** Apache-2.0; see the bundled `Apache-2.0.txt`.
+- **Interface components:** the floating navigation bar and interaction helpers are GPL-3.0-only-derived implementations. Original KernelSU and InstallerX-Revived copyright and source notices remain in the corresponding source files. The miuix cloud layer retains its Apache-2.0 license.
+- **libxposed API and service:** Apache-2.0. AndroidX, Kotlin, and Compose retain their applicable third-party licenses.
+- **MixFlipMod**, by **parallelcc**: https://github.com/parallelcc/MixFlipMod, commit `6b02e8cec6497efd2a07b9ba1307fb9c2f979867`. Cover-app eligibility and recent-task style integration reference this upstream. The long-press menu in `CoverRecents.java`, `RecentsTaskMenu.java`, and `RecentsMenuGeometry.java` was directly adapted from `FlipHomeHook.kt` into Java, preserving the full-screen PopupWindow, button placement and scale pivots, animations, and task-card movement/restoration. These adaptations integrate FlipDuo's settings, animation/haptic preferences, and listener restoration. The derived files are AGPL-3.0-only; see the bundled `MixFlipMod-AGPL-3.0.txt`.
+- **True fullscreen:** `AppCutoutHook.java` adapts `hookFlipScreenMode` from `SystemHook.kt` at the same commit: setting the overlay property to false and removing cutout information and its Insets source from app outputs, combined with FlipDuo's display targeting and configuration parsing. This derived file is also AGPL-3.0-only.
+- **Layout:** cover-screen circular and vertical capsule layouts reference Apple Human Interface Guidelines for vertical controls. Custom line icons are independently drawn; SF Symbols and Apple image assets are not bundled.
+- **Launcher icon:** created with an image-generation tool and resized for Android. Its generation provenance is retained in the private development archive.

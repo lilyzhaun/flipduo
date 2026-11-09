@@ -1,0 +1,41 @@
+# Local configuration and credentials
+local.properties
+.env
+.env.*
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+signing.properties
+
+# Build outputs and IDE state
+.gradle/
+.kotlin/
+.idea/
+*.iml
+**/build/
+.cxx/
+.externalNativeBuild/
+*.apk
+*.aab
+*.dex
+*.class
+*.hprof
+*.log
+.DS_Store
+
+# Private development material
+/tests/
+/tools/
+/reports/
+/research_notes/
+/artwork/
+/module/
+/src/
+/AGENTS.md
+/GITHUB_SUBMISSION.md
+/app/src/test/
+/app/src/androidTest/

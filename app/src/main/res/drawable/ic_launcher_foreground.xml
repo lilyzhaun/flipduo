@@ -1,0 +1,8 @@
+<!-- Geometry from the user-approved artwork/flipduo-icon-v6-clean.png. Only the adaptive safe-zone scale differs. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="1254" android:viewportHeight="1254">
+    <group android:pivotX="627" android:pivotY="627" android:scaleX="0.85" android:scaleY="0.85">
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+            android:pathData="M400,262 H854 A96,96 0,0 1,950,358 V898 A96,96 0,0 1,854,994 H400 A96,96 0,0 1,304,898 V358 A96,96 0,0 1,400,262 Z M708,262 H730 V994 H708 Z M899,445 A59,59 0,1 1,781,445 A59,59 0,1 1,899,445 Z M840,560 A59,59 0,0 1,899,619 V811 A59,59 0,0 1,840,870 A59,59 0,0 1,781,811 V619 A59,59 0,0 1,840,560 Z" />
+    </group>
+</vector>
