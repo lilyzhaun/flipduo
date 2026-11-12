@@ -4,7 +4,7 @@
 
 FlipDuo is an LSPosed module and companion settings app for the cover screens of Xiaomi MIX Flip devices.
 
-This repository contains the production source and build files for **0.6.118**. The app's existing interface text is preserved in its original language.
+This repository contains the production source and build files for **0.6.138 (149)**. The app's existing interface text is preserved in its original language.
 
 ## Features
 
@@ -12,12 +12,17 @@ This repository contains the production source and build files for **0.6.118**. 
 - Black or live blurred backgrounds beside supported apps.
 - Per-app fullscreen options and cover-screen recent-task customization.
 - Optional full-width notifications and framed cover-screen screenshots.
+- Named local appearance presets and per-user selection of an enabled cover-screen keyboard.
 
 Features depend on the device's firmware and the enabled module scopes. Fullscreen content can extend behind the physical cameras.
 
 ## Compatibility
 
 The compatibility targets are MIX Flip (`ruyi`) on HyperOS 3 and MIX Flip 2 (`bixi`) on HyperOS 3 or 4. Firmware-specific behavior requires verification on the corresponding device; these targets are not a guarantee that every feature works on every firmware.
+
+This version has user acceptance on MIX Flip 2 / HyperOS 4. First-generation HyperOS 3 support is based on ROM interface checks, and MIX Flip 2 / HyperOS 3 still requires independent firmware and device verification. Live blur remains experimental and can vary by video content and firmware.
+
+WeType-specific adaptation is not included. Existing saved WeType choices are preserved but delegated to the system or other modules after the updated framework policy loads. Updating the APK alone does not replace hooks already loaded in host processes or revoke existing framework scopes.
 
 Running the module requires a compatible rooted device and an LSPosed implementation supporting libxposed API 101 or newer. The companion app uses libxposed service API 102, with capability checks for features that require newer framework support.
 
@@ -67,7 +72,7 @@ The public source distribution does not include private signing material, test s
 
 ## Source releases
 
-Use the source tag matching the APK version you received. The tag for this version is [`v0.6.118`](https://github.com/lilyzhaun/flipduo/tree/v0.6.118); the initial [`v0.6.117`](https://github.com/lilyzhaun/flipduo/tree/v0.6.117) source remains available.
+Use the source tag matching the APK version you received. The tag for this version is [`v0.6.138`](https://github.com/lilyzhaun/flipduo/tree/v0.6.138). The signed APK is available from the [matching release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.138); earlier source tags remain available.
 
 The public build configuration omits private instrumentation-test dependencies and local SDK paths. It contains the production sources needed to build this version, rather than a byte-for-byte reproduction of a publisher-signed APK.
 

@@ -15,6 +15,8 @@ public final class DockConfig {
     public int statusBarHeight = 64;
     public boolean notificationFullscreen = false;
     public boolean hideCoverBottomGuard = false;
+    public String coverInputMethod = "";
+    public int coverInputMethodUser = -1;
     public boolean framedScreenshots = true;
     public boolean eventIsland = true;
     public boolean islandLock = true;
@@ -104,6 +106,8 @@ public final class DockConfig {
         c.statusBarHeight = bound(prefs.getInt("status_bar_height", 64), 48, 114);
         c.notificationFullscreen = prefs.getBoolean("notification_fullscreen", false);
         c.hideCoverBottomGuard = prefs.getBoolean("hide_cover_bottom_guard", false);
+        c.coverInputMethod = prefs.getString(CoverInputMethodConfig.KEY, "");
+        c.coverInputMethodUser = prefs.getInt(CoverInputMethodConfig.USER_KEY, -1);
         c.framedScreenshots = prefs.getBoolean("framed_screenshots", true);
         c.eventIsland = prefs.getBoolean("event_island", true);
         c.islandLock = prefs.getBoolean("island_lock", true);

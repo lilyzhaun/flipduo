@@ -104,7 +104,7 @@ internal fun CameraColorDialog(store: ControlsStore, c: Controls, target: Camera
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         ColorSwatch(selected); Text("新颜色", color = uiColors().secondary, fontSize = 12.sp)
                     }
-                    TextButton(text = "恢复默认", modifier = Modifier.weight(1f).heightIn(min = 48.dp), onClick = { useColor(target.defaultColor) })
+                    ManagerActionButton(text = "恢复默认", compact = true, modifier = Modifier.weight(1f).heightIn(min = 48.dp), onClick = { useColor(target.defaultColor) })
                 }
                 Spacer(Modifier.height(12.dp))
                 TextField(value = colorInput, onValueChange = { text ->
@@ -152,8 +152,8 @@ internal fun CameraColorDialog(store: ControlsStore, c: Controls, target: Camera
             }
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(text = "取消", modifier = Modifier.weight(1f).heightIn(min = 48.dp), onClick = dismiss)
-                TextButton(text = "确定", enabled = parsed != null && show, modifier = Modifier.weight(1f).heightIn(min = 48.dp), onClick = {
+                ManagerActionButton(text = "取消", modifier = Modifier.weight(1f).heightIn(min = 48.dp), onClick = dismiss)
+                ManagerActionButton(text = "确定", primary = true, enabled = parsed != null && show, modifier = Modifier.weight(1f).heightIn(min = 48.dp), onClick = {
                     parsed?.let { color -> store.update { target.withColor(it, color) }; dismiss() }
                 })
             }

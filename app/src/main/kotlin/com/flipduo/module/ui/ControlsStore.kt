@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.flipduo.module.DockConfig
 import com.flipduo.module.CameraColors
 import com.flipduo.module.CoverBackground
+import com.flipduo.module.CoverInputMethodConfig
 import com.flipduo.module.FlipDuoApplication
 import com.flipduo.module.CutoutAppConfig
 import com.flipduo.module.InnerRecentsConfig
@@ -76,6 +77,8 @@ internal data class Controls(
     val trueFullscreenApps: Set<String> = emptySet(),
     val notificationFullscreen: Boolean = false,
     val hideCoverBottomGuard: Boolean = false,
+    val coverInputMethod: String = "",
+    val coverInputMethodUser: Int = -1,
 )
 internal enum class NavigationKey(val id: String, val title: String) {
     BACK("back", "返回键"), HOME("home", "桌面键"), RECENTS("recents", "最近任务键")
@@ -301,6 +304,8 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
             .putBoolean("hide_cover_camera", c.hideCoverCamera)
             .putBoolean("notification_fullscreen", c.notificationFullscreen)
             .putBoolean(com.flipduo.module.BottomGuardRules.KEY, c.hideCoverBottomGuard)
+            .putString(CoverInputMethodConfig.KEY, c.coverInputMethod)
+            .putInt(CoverInputMethodConfig.USER_KEY, c.coverInputMethodUser)
             .putBoolean("hide_fullscreen_buttons", c.hideFullscreenButtons)
             .putBoolean("unrestrict_cover_apps", c.unrestrictCoverApps)
             .putString("recents_style", c.recentsStyle.name)
@@ -416,6 +421,8 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
         CutoutAppConfig.readTrueFullscreen(p),
         p.getBoolean("notification_fullscreen", false),
         p.getBoolean(com.flipduo.module.BottomGuardRules.KEY, false),
+        p.getString(CoverInputMethodConfig.KEY, "") ?: "",
+        p.getInt(CoverInputMethodConfig.USER_KEY, -1),
     )
 }
 
@@ -425,6 +432,7 @@ internal fun Controls.nativeConfig() = DockConfig().also {
     it.hideCoverCamera = hideCoverCamera
     it.notificationFullscreen = notificationFullscreen
     it.hideCoverBottomGuard = hideCoverBottomGuard
+    it.coverInputMethod = coverInputMethod; it.coverInputMethodUser = coverInputMethodUser
     it.hideFullscreenButtons = hideFullscreenButtons; it.unrestrictCoverApps = unrestrictCoverApps
     it.recentsStyle = recentsStyle; it.recentsCardLongPress = recentsCardLongPress
     it.cameraChargeTarget = cameraChargeTarget; it.cameraChargeTargetPercent = cameraChargeTargetPercent

@@ -10,14 +10,16 @@ import android.view.WindowManager;
 import java.lang.reflect.Method;
 import java.util.function.Consumer;
 
-/** A rounded SurfaceFlinger blur region in the existing native window, with a separate legible glass tint. */
+/** A rounded glass tint; reuses the live fill when present, otherwise owns one window blur region. */
 final class MaterialPanel extends View {
     private static final int BLUR_RADIUS = 100;
     private static Method viewRoot, createBlur, radius, corner;
     private static boolean unavailable;
     private DockAppearance material;
     private Drawable blurDrawable;
-    private boolean wantsBlur, listening, blurEnabled, suppressed;
+    private boolean wantsBlur, listening, blurEnabled, suppressed, sharedFill, sharedFillVisible;
+    private Drawable tintDrawable;
+    private boolean translucentTint;
     private WindowManager windowManager;
     private final Consumer<Boolean> blurListener = enabled -> {
         blurEnabled = enabled;
@@ -35,8 +37,16 @@ final class MaterialPanel extends View {
         });
     }
     void appearance(DockAppearance appearance, boolean useBlur) {
-        if (material == appearance && wantsBlur == useBlur) { invalidate(); return; }
+        if (material == appearance && wantsBlur == useBlur && tintDrawable != null) { invalidate(); return; }
+        if (material != appearance) tintDrawable = null;
         material = appearance; wantsBlur = useBlur;
+        if (isAttachedToWindow()) updateListener();
+        updateMaterial();
+    }
+    void sharedFill(boolean active, boolean visible) {
+        visible &= active;
+        if (sharedFill == active && sharedFillVisible == visible) return;
+        sharedFill = active; sharedFillVisible = visible;
         if (isAttachedToWindow()) updateListener();
         updateMaterial();
     }
@@ -57,12 +67,12 @@ final class MaterialPanel extends View {
         super.onDetachedFromWindow();
     }
     private void updateListener() {
-        if (wantsBlur && !suppressed && !unavailable && !listening) {
+        if (wantsBlur && !sharedFill && !suppressed && !unavailable && !listening) {
             windowManager = getContext().getSystemService(WindowManager.class);
             blurEnabled = windowManager.isCrossWindowBlurEnabled();
             listening = true;
             windowManager.addCrossWindowBlurEnabledListener(getContext().getMainExecutor(), blurListener);
-        } else if ((!wantsBlur || suppressed || unavailable) && listening) {
+        } else if ((!wantsBlur || sharedFill || suppressed || unavailable) && listening) {
             windowManager.removeCrossWindowBlurEnabledListener(blurListener);
             listening = false;
         }
@@ -72,8 +82,14 @@ final class MaterialPanel extends View {
         // Remove both layers while the native pager/card owns the slot; layout/theme callbacks must not recreate them.
         if (suppressed) { releaseBlur(); setBackground(null); return; }
         if (material == null) return;
+        // The full live backdrop has already been blurred. Sampling it again for every
+        // control creates overlapping regions (and clears more of the same window buffer).
+        // While the source is pending, keep the existing denser, readable material instead.
+        if (sharedFill) {
+            releaseBlur(); showTint(sharedFillVisible && isAttachedToWindow()); return;
+        }
         if (!wantsBlur || !blurEnabled || unavailable || !isAttachedToWindow()) {
-            releaseBlur(); setBackground(material.surface(false)); return;
+            releaseBlur(); showTint(false); return;
         }
         try {
             if (viewRoot == null) {
@@ -88,13 +104,30 @@ final class MaterialPanel extends View {
                 radius.invoke(blurDrawable, BLUR_RADIUS);
             }
             corner.invoke(blurDrawable, Math.min(getWidth(), getHeight()) / 2f);
-            setBackground(new LayerDrawable(new Drawable[]{blurDrawable, material.surface(true)}));
+            Drawable tint = tint(true);
+            Drawable background = getBackground();
+            if (!(background instanceof LayerDrawable layers) || layers.getNumberOfLayers() != 2
+                    || layers.getDrawable(0) != blurDrawable || layers.getDrawable(1) != tint) {
+                // Detach before adopting reused children, preserving their invalidation callbacks.
+                setBackground(null);
+                setBackground(new LayerDrawable(new Drawable[]{blurDrawable, tint}));
+            }
             syncBlurVisibility();
         } catch (ReflectiveOperationException error) {
             unavailable = true; releaseBlur(); updateListener();
-            setBackground(material.surface(false));
+            setBackground(null); showTint(false);
             NativeLog.warning("Compositor group blur unavailable; denser glass tint retained", error);
         }
+    }
+    private Drawable tint(boolean translucent) {
+        if (tintDrawable == null || translucentTint != translucent) {
+            tintDrawable = material.surface(translucent); translucentTint = translucent;
+        }
+        return tintDrawable;
+    }
+    private void showTint(boolean translucent) {
+        Drawable tint = tint(translucent);
+        if (getBackground() != tint) setBackground(tint);
     }
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w,h,oldw,oldh); invalidateOutline();
@@ -110,7 +143,7 @@ final class MaterialPanel extends View {
         if (blurDrawable == null) return;
         // The compositor region has its own alpha; View.alpha alone only fades the tint buffer.
         blurDrawable.setAlpha(Math.round(getAlpha() * 255));
-        boolean visible = !suppressed && isShown() && wantsBlur && blurEnabled && getAlpha() > 0;
+        boolean visible = !sharedFill && !suppressed && isShown() && wantsBlur && blurEnabled && getAlpha() > 0;
         if (blurDrawable.setVisible(visible, false) && visible) {
             // BackgroundBlurDrawable builds an empty path when laid out while hidden (the tools panel).
             android.graphics.Rect bounds = blurDrawable.getBounds();
@@ -122,6 +155,7 @@ final class MaterialPanel extends View {
         blurDrawable = null;
     }
     String describeBlur() {
-        return "requested=" + wantsBlur + " enabled=" + blurEnabled + " suppressed=" + suppressed + " drawable=" + blurDrawable;
+        return "requested=" + wantsBlur + " enabled=" + blurEnabled + " suppressed=" + suppressed
+                + " sharedFill=" + sharedFill + " sharedVisible=" + sharedFillVisible + " drawable=" + blurDrawable;
     }
 }

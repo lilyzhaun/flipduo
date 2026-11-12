@@ -340,6 +340,7 @@ final class NativeDock extends ViewGroup {
     }
 
     private boolean immersive, nativeDark = true, nativeBlur;
+    private boolean sharedFill, sharedFillVisible;
     private boolean clockTone = true;
     private boolean nativeToneHeld;
     private boolean nativeDesktop, awaitDesktopTint;
@@ -590,6 +591,15 @@ final class NativeDock extends ViewGroup {
         applyButtonPresence();
     }
 
+    /** Mode disables redundant region blur even before a source is ready; readiness only selects the tint. */
+    void sharedBlurFill(boolean active, boolean visible) {
+        visible &= active;
+        if (sharedFill == active && sharedFillVisible == visible) return;
+        sharedFill = active; sharedFillVisible = visible;
+        for (MaterialPanel panel : panels) panel.sharedFill(active, visible);
+        toolPanel.sharedFill(active, visible);
+        islandPanel.sharedFill(active, visible);
+    }
     void applyAppearance(boolean bottom) {
         if (!enabled) return;
         if (bottomControls != bottom) { bottomControls = bottom; requestLayout(); }

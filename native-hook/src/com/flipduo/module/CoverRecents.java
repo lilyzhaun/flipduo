@@ -53,10 +53,10 @@ final class CoverRecents {
             showLock = header.getReturnType().getDeclaredMethod("showOrHideLockImageView", boolean.class);
             getStyle = stackClass.getMethod("getTaskStackViewLayoutStyle"); getViews = stackClass.getMethod("getTaskViews");
             setMenu = stackClass.getMethod("setIsShowingMenu", boolean.class); isMenu = stackClass.getMethod("isShowingMenu");
-            toHome = containerClass.getMethod("dismissRecentsToHome", boolean.class);
+            toHome = containerClass.getDeclaredMethod("dismissRecentsToHome", boolean.class);
             listenerInfo = View.class.getDeclaredMethod("getListenerInfo"); listenerInfo.setAccessible(true);
             longListener = field(listenerInfo.getReturnType(), "mOnLongClickListener");
-            header.setAccessible(true); showLock.setAccessible(true); lock.setAccessible(true);
+            header.setAccessible(true); showLock.setAccessible(true); lock.setAccessible(true); toHome.setAccessible(true);
             module.hook(taskView.getDeclaredMethod("onFinishInflate")).intercept(chain -> {
                 Object result = chain.proceed(); View view = (View) chain.getThisObject();
                 originals.putIfAbsent(view, new OriginalListener((View.OnLongClickListener) longListener.get(listenerInfo.invoke(view)), view.isLongClickable()));

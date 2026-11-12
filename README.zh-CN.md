@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.118** 的生产源码与必要构建文件，应用现有界面文案保留。
+FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.138（149）** 的生产源码与必要构建文件，应用现有界面文案保留。
 
 ## 功能
 
@@ -10,12 +10,17 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 - 支持应用旁侧的纯黑或实时模糊背景。
 - 按应用设置全屏，以及自定义外屏最近任务。
 - 可选通知全宽与带壳外屏截图。
+- 可命名的本机外观方案，以及按Android用户选择已启用的外屏输入法。
 
 具体功能取决于系统固件和已启用的模块作用域。全屏内容可能延伸至物理镜头遮挡区域。
 
 ## 兼容目标
 
 目标环境为初代 MIX Flip（`ruyi`）HyperOS 3，以及 MIX Flip 2（`bixi`）HyperOS 3／4。固件相关行为需要在对应设备上验证，兼容目标不代表每项功能已在所有固件上通过验收。
+
+本版本已获MIX Flip 2／HyperOS 4用户验收；初代HyperOS 3以ROM接口核对为依据，MIX Flip 2／HyperOS 3仍待独立固件及实机验证。实时模糊仍属试验功能，表现可能随视频内容和固件变化。
+
+当前不包含微信输入法专项适配。旧微信选择保留，系统框架加载新版策略后交回原生或其他模块；仅更新APK不会替换旧宿主内已加载的Hook，也不会自动撤销框架已有作用域。
 
 运行模块需要兼容的已 Root 设备，以及支持 libxposed API 101 或更新版本的 LSPosed 实现。管理应用使用 libxposed service API 102，并对需要较新框架的能力进行检查。
 
@@ -61,7 +66,7 @@ app/build/outputs/apk/release/app-release-unsigned.apk
 
 ## 对应版本源码
 
-请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.118`](https://github.com/lilyzhaun/flipduo/tree/v0.6.118)，首个公开版本 [`v0.6.117`](https://github.com/lilyzhaun/flipduo/tree/v0.6.117) 的源码仍可获取。
+请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.138`](https://github.com/lilyzhaun/flipduo/tree/v0.6.138)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.138)，此前源码标签继续保留。
 
 公开构建配置移除了私有仪器测试依赖和本机SDK路径，提供构建该版本所需的生产源码；它不承诺逐字节复现发布者签名后的APK。
 

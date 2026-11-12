@@ -6,7 +6,6 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
@@ -93,7 +92,7 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
         }
     }
     PageFrame("应用全屏", onBack = back, itemSpacing = 12.dp, actions = {
-        TextButton(text = "刷新", onClick = { refresh++; store.retrySync(); store.refreshSystemPolicy() })
+        ManagerActionButton(text = "刷新", compact = true, onClick = { refresh++; store.retrySync(); store.refreshSystemPolicy() })
     }) {
         item(key = "search") {
             TextField(value = query, onValueChange = { query = it }, label = "搜索应用名称或包名",
@@ -194,11 +193,7 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
                             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("70% — 110%", fontSize = 12.sp, color = uiColors().secondary)
-                                Box(Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
-                                    .clickable { save(defaultScale) }.padding(horizontal = 12.dp),
-                                    contentAlignment = Alignment.Center) {
-                                    Text("恢复 ${defaultScale}%", fontSize = 13.sp, color = uiColors().accent)
-                                }
+                                ManagerActionButton(text = "恢复 ${defaultScale}%", compact = true, onClick = { save(defaultScale) })
                             }
                         }
                     }

@@ -213,7 +213,7 @@ final class AppCutoutHook {
         preferences.registerOnSharedPreferenceChangeListener(preferenceListener);
         ready = true;
         readPreference();
-        NativeModule.info("AppCutout v124 system hooks installed; per-display density; preserve-cutout / true-fullscreen modes");
+        NativeModule.info("AppCutout v135 system hooks installed; restored pre-v130 fullscreen boundary; no display-query, metrics or computeFrames hook");
     }
 
     private void readPreference() {

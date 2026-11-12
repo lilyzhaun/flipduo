@@ -45,6 +45,7 @@ public final class NativeModule extends XposedModule {
     private InnerRecentsSnapshotHook innerRecentsSnapshotHook;
     private CoverAppCompatHook coverAppCompatHook;
     private CoverBottomGuardPolicy bottomGuardPolicy;
+    private CoverInputMethodHook coverInputMethodHook;
     private RecentsAppAnimation cornerHandoff;
     private StockWidgetStyle widgetStyle;
     /** Set only while the OEM recomputes widget material for a scene with nothing behind the slot (WidgetMaterialPolicy). */
@@ -80,6 +81,8 @@ public final class NativeModule extends XposedModule {
         catch (ReflectiveOperationException | RuntimeException error) { warning("Cover app eligibility extension unavailable; original eligibility retained", error); }
         try { bottomGuardPolicy = new CoverBottomGuardPolicy(this, param.getClassLoader()); }
         catch (ReflectiveOperationException | RuntimeException error) { warning("Bottom guard rendering policy unavailable; native overlay retained", error); }
+        try { coverInputMethodHook = new CoverInputMethodHook(this, param.getClassLoader()); }
+        catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Cover IME selection unavailable; native input method policy retained", error); }
     }
 
     @Override public void onPackageReady(PackageReadyParam param) {
@@ -927,6 +930,7 @@ public final class NativeModule extends XposedModule {
         if (session.blurFill != null) session.blurFill.sync(mirrorAllowed, liveSource, rotation, firstRadius, lastRadius);
         session.columnFade.liveFill(blurFill); // Mode, not readiness: missing frames must not reveal the old black painter.
         if (session.blurFill != null) session.blurFill.alpha(session.columnFade.opacity());
+        dock.sharedBlurFill(mirrorAllowed, session.blurFill != null && session.blurFill.visible());
         boolean cameraExtent = cameraStatusEligible(root);
         if (!columnVisible && !cameraExtent && session.extended) { rebuildNativeGeometry(root, session); changed = true; }
         // Xiaomi updateWindowSize restores resource padding on every call, not just inflate.
@@ -979,7 +983,8 @@ public final class NativeModule extends XposedModule {
         // In blur mode this drawable is clock-only and paints nothing; the compositor owns the whole material.
         // The native mini window is an app task below this overlay: only its slot is left transparent.
         if (session.mini != null) background = session.mini.background(background, dock);
-        if (root.getBackground() != background) root.setBackground(background);
+        if (session.blurFill != null) session.blurFill.background(background);
+        else if (root.getBackground() != background) root.setBackground(background);
         configureCameraStatus(root, session, rotation, cameraExtent);
         int privateFlags = overlayPrivateFlags.getInt(nativeParams);
         trustNativeOverlay.invoke(nativeParams);
