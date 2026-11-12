@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.142
+
+Cumulative changes since 0.6.138:
+
+- Add a home-screen quick-restart dialog for Screenshot, Sogou Input Method for Xiaomi, FlipHome, and System UI. Select individual scopes or all four and confirm to send restart requests for the current Android user. Root access is required; per-scope results distinguish sent requests, inactive processes, and failures.
+- Use native miuix dialog buttons and a lightweight multi-select list, with select-all above the list and fixed bottom actions.
+- Consolidate MixFlipMod attribution under Open-source licenses and include HyperCeiler attribution for the quick-restart flow.
+- Restore framed cover-screen screenshots with system Screenshot 1.6.3.44, including the native hardware-to-software bitmap conversion. Retain the older modern and legacy screenshot paths, the original preview/editing images, and PNG transparency for framed exports.
+
+The screenshot correction is user-accepted on MIX Flip 2 / HyperOS 4. Other target environments retain the verification limits described in the README.
+
 ## 0.6.138
 
 Cumulative changes since the previous public source version, 0.6.118:

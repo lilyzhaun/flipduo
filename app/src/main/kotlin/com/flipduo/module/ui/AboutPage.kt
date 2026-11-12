@@ -122,9 +122,7 @@ internal fun AboutPage(license: () -> Unit, back: () -> Unit) {
                                  onClick = ({ context.startActivity(updateDownloadIntent()) }).takeIf { active })
                              ArrowPreference(title = "作者酷安", summary = "查看作者主页",
                                  onClick = ({ context.startActivity(authorCoolapkIntent()) }).takeIf { active })
-                             ArrowPreference(title = "MixFlipMod", summary = "parallelcc · 外屏解锁与最近任务功能来源",
-                                 onClick = ({ context.startActivity(mixFlipModIntent()) }).takeIf { active })
-                            ArrowPreference(title = "开源许可", summary = "项目许可与第三方致谢", onClick = license.takeIf { active })
+                             ArrowPreference(title = "开源许可", summary = "项目许可与第三方致谢", onClick = license.takeIf { active })
                         }
                     }
                 }
@@ -153,6 +151,7 @@ internal fun LicensePage(back: () -> Unit) {
         LicenseEntry("Kotlin 与 kotlinx.coroutines", "语言与协程支持", "Apache-2.0", "Apache-2.0.txt"),
         LicenseEntry("派生界面代码", "PlayBilling、InstallerX-Revived 与 KernelSU", "GPL-3.0-only", "LICENSE"),
         LicenseEntry("MixFlipMod", "parallelcc · 外屏解锁与最近任务功能来源，卡片长按菜单直接移植", "AGPL-3.0", "MixFlipMod-AGPL-3.0.txt"),
+        LicenseEntry("HyperCeiler", "HyperCeiler Contributions · 首页快速重启交互来源", "AGPL-3.0-only", "MixFlipMod-AGPL-3.0.txt"),
     ) }
     var selected by rememberSaveable { mutableStateOf<Int?>(null) }
     val entry = selected?.let(entries::get)
@@ -178,6 +177,11 @@ internal fun LicensePage(back: () -> Unit) {
             if (entry.title == "MixFlipMod") item {
                 ArrowPreference(title = "项目主页", summary = "github.com/parallelcc/MixFlipMod",
                     onClick = { context.startActivity(mixFlipModIntent()) })
+            }
+            if (entry.title == "HyperCeiler") item {
+                ArrowPreference(title = "项目主页", summary = "github.com/ReChronoRain/HyperCeiler",
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://github.com/ReChronoRain/HyperCeiler")).addCategory(Intent.CATEGORY_BROWSABLE)) })
             }
             if (paragraphs == null) item { Text("正在读取许可…", color = uiColors().secondary) }
             else items(paragraphs!!) { paragraph ->

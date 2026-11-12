@@ -18,6 +18,8 @@ final class ScreenshotFrameHook {
 
     static void install(NativeModule module, ClassLoader loader) throws ReflectiveOperationException {
         ScreenshotHostApi api = ScreenshotHostApi.resolve(loader);
+        if (api.softwareCaller != null && !module.deoptimize(api.softwareCaller))
+            throw new ReflectiveOperationException("Cannot deoptimize screenshot software-conversion caller");
         if (api.modern()) {
             module.hook(Application.class.getDeclaredMethod("attach", Context.class)).intercept(chain -> {
                 Object result = chain.proceed();
@@ -31,6 +33,17 @@ final class ScreenshotFrameHook {
                     int id = (Integer) api.getDisplayId.invoke(chain.getThisObject());
                     remember(image, context.getSystemService(DisplayManager.class).getDisplay(id));
                 }
+                return result;
+            });
+            if (api.softwareBitmap != null) module.hook(api.softwareBitmap).intercept(chain -> {
+                Bitmap original = (Bitmap) chain.getArg(0);
+                Integer rotation = COVER_CAPTURES.get(original);
+                boolean tracked = rotation != null && isFullCover(original);
+                int width = tracked ? original.getWidth() : 0, height = tracked ? original.getHeight() : 0;
+                Object result = chain.proceed(); // OEM owns conversion, optional recycling, and the returned bitmap.
+                if (tracked && result instanceof Bitmap converted && isFullCover(converted)
+                        && converted.getWidth() == width && converted.getHeight() == height)
+                    COVER_CAPTURES.put(converted, rotation);
                 return result;
             });
         } else {
@@ -64,7 +77,9 @@ final class ScreenshotFrameHook {
                     + " rotation=" + rotation + " format=PNG alpha=" + framed.hasAlpha());
             return chain.proceed(args);
         });
-        NativeModule.info("Cover screenshot export installed: device-selected artwork, " + (api.modern() ? "metadata" : "native-completed-callback") + "; unprofiled devices retain original pixels");
+        NativeModule.info("Cover screenshot export installed: device-selected artwork, " + (api.modern() ? "metadata" : "native-completed-callback")
+                + " save=" + api.save.getDeclaringClass().getName() + " software-copy=" + (api.softwareBitmap != null)
+                + "; unprofiled devices retain original pixels");
     }
 
     private static void remember(Bitmap image, Display display) {

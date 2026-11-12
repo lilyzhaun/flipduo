@@ -48,6 +48,7 @@ import top.yukonga.miuix.kmp.preference.*
 
 @Composable
 internal fun HomePage(store: ControlsStore, connection: Connection, c: Controls, manager: () -> Unit, details: () -> Unit) {
+    var showRestart by rememberSaveable { mutableStateOf(false) }
     val epoch by store.runtimeEpoch.collectAsState()
     val targets by store.targets.collectAsState()
     val save by store.saveStatus.collectAsState()
@@ -63,7 +64,10 @@ internal fun HomePage(store: ControlsStore, connection: Connection, c: Controls,
         else if (dark) Color(0xfff1c21b) else Color(0xff8e6a00)
     val surface = if (success) { if (dark) Color(0xff0e3820) else Color(0xffdefbe6) }
         else if (dark) Color(0xff3b2f05) else Color(0xfffcf4d6)
-    PageFrame("FlipDuo") {
+    PageFrame("FlipDuo", actions = {
+        ManagerActionButton(text = "快速重启", compact = true, modifier = Modifier.testTag("quick-restart"),
+            onClick = { showRestart = true })
+    }) {
         item { Card(Modifier.fillMaxWidth(), colors = CardDefaults.defaultColors(surface, uiColors().text), insideMargin = PaddingValues(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(MiuixIcons.Info, null, tint = ink, modifier = Modifier.size(20.dp))
@@ -82,6 +86,7 @@ internal fun HomePage(store: ControlsStore, connection: Connection, c: Controls,
         } }
         item { Preview(store, c) }
     }
+    ScopeRestartDialog(showRestart, dismiss = { showRestart = false }, refreshTargets = store::refreshTargets)
 }
 
 @Composable
