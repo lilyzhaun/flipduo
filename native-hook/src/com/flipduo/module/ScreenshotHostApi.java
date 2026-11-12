@@ -7,6 +7,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.function.Consumer;
 
 /** Exact capture/export contracts verified from both supplied ROMs, resolved before registering hooks. */
 final class ScreenshotHostApi {
@@ -14,12 +15,15 @@ final class ScreenshotHostApi {
     final Field legacyContext, legacyBitmap;
     final Method[] legacyCallers;
     final Constructor<?> save;
+    final Method softwareBitmap, softwareCaller;
 
     private ScreenshotHostApi(Method bitmap, Method type, Method display, Method complete, Method nativeDisplay,
-                              Field captureContext, Field captureBitmap, Method[] callers, Constructor<?> save) {
+                              Field captureContext, Field captureBitmap, Method[] callers, Constructor<?> save,
+                              Method softwareBitmap, Method softwareCaller) {
         setBitmap = bitmap; getType = type; getDisplayId = display;
         legacyComplete = complete; legacyDisplay = nativeDisplay; this.save = save;
         legacyContext = captureContext; legacyBitmap = captureBitmap; legacyCallers = callers;
+        this.softwareBitmap = softwareBitmap; this.softwareCaller = softwareCaller;
     }
 
     static ScreenshotHostApi resolve(ClassLoader loader) throws ReflectiveOperationException {
@@ -47,15 +51,30 @@ final class ScreenshotHostApi {
                     throw new NoSuchMethodException("Unrecognized legacy screenshot caller contract: " + caller.getName());
             Constructor<?> save = loader.loadClass("com.miui.screenshot.L").getDeclaredConstructor(Context.class,
                     Bitmap.class, int.class, Bitmap.CompressFormat.class, callback, finish);
-            return new ScreenshotHostApi(null, null, null, completed, display, context, image, callers, save);
+            return new ScreenshotHostApi(null, null, null, completed, display, context, image, callers, save, null, null);
         }
         Method type = data.getDeclaredMethod("getType"), display = data.getDeclaredMethod("getDisplayId");
         Method bitmap = data.getDeclaredMethod("setBitmap", Bitmap.class);
-        Constructor<?> save = loader.loadClass("com.miui.screenshot.Z").getDeclaredConstructor(Context.class,
-                Bitmap.class, int.class, Bitmap.CompressFormat.class,
+        Class<?>[] parameters = {Context.class, Bitmap.class, int.class, Bitmap.CompressFormat.class,
                 loader.loadClass("com.miui.screenshot.interfaces.ISaveCallback"),
-                loader.loadClass("com.miui.screenshot.interfaces.ITotalFinishCallback"));
-        return new ScreenshotHostApi(bitmap, type, display, null, null, null, null, new Method[0], save);
+                loader.loadClass("com.miui.screenshot.interfaces.ITotalFinishCallback")};
+        try {
+            // Preserve the verified older metadata pipeline when its exact constructor still exists.
+            Constructor<?> save = loader.loadClass("com.miui.screenshot.Z").getDeclaredConstructor(parameters);
+            return new ScreenshotHostApi(bitmap, type, display, null, null, null, null, new Method[0], save, null, null);
+        } catch (ClassNotFoundException | NoSuchMethodException newerSaveData) {
+            // Verified RELEASE-1.6.3.44: Z was reused for a Runnable; b0 owns the save data.
+            // B.g converts HARDWARE input to a software copy before passing it to b0.
+            Constructor<?> save = loader.loadClass("com.miui.screenshot.b0").getDeclaredConstructor(parameters);
+            Method convert = loader.loadClass("com.miui.screenshot.BitmapUtils")
+                    .getDeclaredMethod("g", Bitmap.class, boolean.class);
+            Method caller = loader.loadClass("com.miui.screenshot.B").getDeclaredMethod("g", data, Consumer.class,
+                    loader.loadClass("com.miui.screenshot.TakeScreenshotService$b"));
+            if (convert.getReturnType() != Bitmap.class || !Modifier.isStatic(convert.getModifiers())
+                    || caller.getReturnType() != void.class || Modifier.isStatic(caller.getModifiers()))
+                throw new NoSuchMethodException("Unrecognized screenshot software-conversion contract");
+            return new ScreenshotHostApi(bitmap, type, display, null, null, null, null, new Method[0], save, convert, caller);
+        }
     }
 
     boolean modern() { return setBitmap != null; }
