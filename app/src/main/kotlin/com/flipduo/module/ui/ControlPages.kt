@@ -3,8 +3,6 @@ package com.flipduo.module.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -18,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
@@ -26,9 +23,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -134,7 +133,7 @@ private fun Preview(store: ControlsStore, c: Controls, editable: Boolean = false
         if (editable && showGuidance) {
             Spacer(Modifier.height(12.dp))
             Text("双按钮组整体拖动，等高控件可交换；松手保存。", color = colors.secondary, fontSize = 13.sp)
-            TextButton(text = "重置控件位置", onClick = { store.update { it.copy(positions = DockLayout().encode()) } }, modifier = Modifier.padding(top = 8.dp))
+            ManagerActionButton(text = "重置控件位置", onClick = { store.update { it.copy(positions = DockLayout().encode()) } }, modifier = Modifier.padding(top = 8.dp))
         }
         if (showGuidance && c.background == CoverBackground.BLUR_FILL) {
             Spacer(Modifier.height(8.dp))
@@ -145,10 +144,7 @@ private fun Preview(store: ControlsStore, c: Controls, editable: Boolean = false
 
 @Composable
 private fun PreviewAction(label: String, onClick: () -> Unit) {
-    Box(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(10.dp))
-        .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-        Text(label, color = uiColors().accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-    }
+    ManagerActionButton(text = label, onClick = onClick, compact = true)
 }
 
 internal enum class LayoutPanel(val title: String, val summary: String) {
@@ -170,11 +166,26 @@ internal fun LayoutPage(store: ControlsStore, c: Controls) {
     var showColorPicker by rememberSaveable { mutableStateOf(false) }
     var fineOpen by rememberSaveable { mutableStateOf("") } // B05: collapsed fine groups, per page
     var previewExpanded by rememberSaveable { mutableStateOf(false) }
+    val presets = remember(context) { AppearancePresetSlots(context.getSharedPreferences("appearance_presets", android.content.Context.MODE_PRIVATE)) }
+    var presetEpoch by remember { mutableIntStateOf(0) }
+    var presetSlot by rememberSaveable { mutableIntStateOf(0) }
+    var renamePreset by rememberSaveable { mutableStateOf(false) }
+    var presetName by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
+    fun editPreset(slot: Int, rename: Boolean) {
+        val name = presets.read(slot).name
+        presetName = TextFieldValue(name, TextRange(0, name.length)); renamePreset = rename; presetSlot = slot
+    }
+    fun savePreset() {
+        if (presetSlot == 0) return
+        val saved = if (renamePreset) presets.rename(presetSlot, presetName.text)
+            else presets.save(presetSlot, presetName.text, store.state.value)
+        if (saved) { presetEpoch++; presetSlot = 0 }
+    }
     val scrollStates = LayoutPanel.entries.associateWith { key(it) { rememberLazyListState() } }
     val active = LocalRouteActive.current
     val onCover = calibrationOnCoverDisplay()
     val motion = managerMotionEnabled()
-    BackHandler(active && panel != LayoutPanel.MENU && !showColorPicker) { panel = LayoutPanel.MENU }
+    BackHandler(active && panel != LayoutPanel.MENU && !showColorPicker && presetSlot == 0) { panel = LayoutPanel.MENU }
     PageFrame("外屏布局", scrollState = scrollStates.getValue(panel), pinnedContent = { available ->
         Column(Modifier.fillMaxWidth().testTag("layout-pinned-region")) {
             // On cover, the real layout is already visible beside this app. Give its preview's space
@@ -214,6 +225,7 @@ internal fun LayoutPage(store: ControlsStore, c: Controls) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 layoutPanelItems(visiblePanel, store, c, geometry,
                     chooseColor = { target -> colorTarget = target; showColorPicker = true }, select = { panel = it },
+                    presets = { PresetSlots(store, presets, presetEpoch, ::editPreset) { slot -> presets.clear(slot); presetEpoch++ } },
                     fineOpen = { SettingsLayers.isOpen(fineOpen, it.name) }, toggleFine = { fineOpen = SettingsLayers.toggle(fineOpen, it.name) })
             }
         }
@@ -221,33 +233,39 @@ internal fun LayoutPage(store: ControlsStore, c: Controls) {
     colorTarget?.let { target -> key(target) {
         CameraColorDialog(store, c, target, showColorPicker, dismiss = { showColorPicker = false }, dismissed = { colorTarget = null })
     } }
+    // Keep the editor outside the lazy item: opening the IME can move that item offscreen on cover.
+    PresetNameDialog(show = presetSlot != 0, renameOnly = renamePreset, value = presetName,
+        onValueChange = { presetName = it }, dismiss = { presetSlot = 0 }, save = ::savePreset)
 }
 
 /** B05 local appearance presets: three slots in app-only storage; applying goes through the normal save path. */
 @Composable
-private fun PresetSlots(store: ControlsStore) {
+private fun PresetSlots(store: ControlsStore, presets: AppearancePresetSlots, epoch: Int,
+    edit: (Int, Boolean) -> Unit, clear: (Int) -> Unit) {
     val context = LocalContext.current
-    val prefs = remember(context) { context.getSharedPreferences("appearance_presets", android.content.Context.MODE_PRIVATE) }
-    var epoch by remember { mutableStateOf(0) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         for (slot in 1..3) {
-            val saved = remember(epoch, slot) { prefs.getString("slot_$slot", null) }
-            val time = remember(epoch, slot) { prefs.getLong("slot_${slot}_time", 0L) }
+            val entry = remember(epoch, slot) { presets.read(slot) }
+            val saved = entry.encoded
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-                Text("方案" + "一二三"[slot - 1], color = uiColors().text, fontWeight = FontWeight.SemiBold)
-                Text(if (saved == null) "空" else "保存于 " + android.text.format.DateUtils.formatDateTime(context, time,
-                    android.text.format.DateUtils.FORMAT_SHOW_DATE or android.text.format.DateUtils.FORMAT_SHOW_TIME),
-                    color = uiColors().secondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(text = "保存当前", modifier = Modifier.weight(1f).heightIn(min = 48.dp), onClick = {
-                        prefs.edit().putString("slot_$slot", AppearancePreset.capture(store.state.value))
-                            .putLong("slot_${slot}_time", System.currentTimeMillis()).apply(); epoch++
-                    })
-                    TextButton(text = "应用", enabled = saved != null, modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                        onClick = { store.update { AppearancePreset.apply(it, saved) } })
-                    TextButton(text = "清除", enabled = saved != null, modifier = Modifier.weight(1f).heightIn(min = 48.dp), onClick = {
-                        prefs.edit().remove("slot_$slot").remove("slot_${slot}_time").apply(); epoch++
-                    })
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(entry.name, color = uiColors().text, fontWeight = FontWeight.SemiBold,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(if (saved == null) "尚未保存外观" else "保存于 " + android.text.format.DateUtils.formatDateTime(context, entry.savedAt,
+                            android.text.format.DateUtils.FORMAT_SHOW_DATE or android.text.format.DateUtils.FORMAT_SHOW_TIME),
+                            color = uiColors().secondary, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    ManagerActionButton(text = if (saved == null) "保存当前" else "重命名", compact = true,
+                        modifier = Modifier.testTag("preset-edit-$slot"), onClick = { edit(slot, saved != null) })
+                }
+                if (saved != null) FlowRow(Modifier.fillMaxWidth().padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ManagerActionButton(text = "应用", primary = true,
+                        modifier = Modifier.testTag("preset-apply-$slot"), onClick = { store.update { AppearancePreset.apply(it, saved) } })
+                    ManagerActionButton(text = "保存当前", onClick = { edit(slot, false) })
+                    ManagerActionButton(text = "清除", onClick = { clear(slot) })
                 }
             }
         }
@@ -267,7 +285,7 @@ private fun FineGroupRow(title: String, custom: Boolean, open: Boolean, toggle: 
 internal fun UndoGroupCard(store: ControlsStore, group: SettingsGroup) {
     val available by store.undoable.collectAsState()
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        TextButton(text = "撤销本页上次修改", enabled = group in available, onClick = { store.undo(group) },
+        ManagerActionButton(text = "撤销本页上次修改", enabled = group in available, onClick = { store.undo(group) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))
         if (group in available) Text("仅撤销本页，不影响其他设置", color = uiColors().secondary, fontSize = 12.sp, lineHeight = 18.sp)
     }
@@ -279,6 +297,7 @@ internal val SettingsPanel.undoGroup: SettingsGroup? get() = SettingsGroup.entri
 
 private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsStore, c: Controls, geometry: CoverGeometry,
     chooseColor: (CameraColorTarget) -> Unit, select: (LayoutPanel) -> Unit,
+    presets: @Composable () -> Unit,
     fineOpen: (LayoutPanel) -> Boolean = { false }, toggleFine: (LayoutPanel) -> Unit = {}) {
         when (panel) {
         LayoutPanel.MENU -> {
@@ -307,7 +326,7 @@ private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsSt
         if (!c.eventIsland) item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(20.dp)) {
             Text("放大顶部预览后可拖动控件；双按钮组整体移动，等高控件可交换，松手保存。",
                 color = uiColors().secondary, fontSize = 13.sp)
-            TextButton(text = "重置控件位置", modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp),
+            ManagerActionButton(text = "重置控件位置", modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp),
                 onClick = { store.update { it.copy(positions = DockLayout().encode()) } })
         } }
         }
@@ -378,7 +397,7 @@ private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsSt
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(20.dp)) {
             Text("调整前先开启对应圆环。按镜头在右下时调整：横向正值向右，纵向正值向下；倒置自动镜像。粗细向内增厚，外缘不动。关闭不清除校准参数。二代保留系统音乐实测圆心；其他外屏以系统避让区为可微调基准，不代表光学标定。",
                 color = uiColors().secondary, fontSize = 12.sp, lineHeight = 18.sp)
-            TextButton(text = "恢复圆环默认位置与大小", modifier = Modifier.padding(top = 12.dp), onClick = {
+            ManagerActionButton(text = "恢复圆环默认位置与大小", modifier = Modifier.padding(top = 12.dp), onClick = {
                 store.update { it.copy(cameraMainX = 0, cameraMainY = 0, cameraLowerX = 0, cameraLowerY = 0,
                     cameraMainRadius = DockConfig.CAMERA_RADIUS_DEFAULT, cameraLowerRadius = DockConfig.CAMERA_RADIUS_DEFAULT,
                     cameraMainStroke = DockConfig.CAMERA_STROKE_DEFAULT, cameraLowerStroke = DockConfig.CAMERA_STROKE_DEFAULT) }
@@ -409,7 +428,7 @@ private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsSt
         } }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(20.dp)) {
             Text("100% 为原有样式。松手保存，整体大小保留原来的设置。", color = uiColors().secondary, fontSize = 12.sp, lineHeight = 18.sp)
-            TextButton(text = "恢复三合一默认样式", modifier = Modifier.padding(top = 12.dp).heightIn(min = 48.dp), onClick = {
+            ManagerActionButton(text = "恢复三合一默认样式", modifier = Modifier.padding(top = 12.dp).heightIn(min = 48.dp), onClick = {
                 store.update { it.copy(statusScale = 100, trioStroke = 100, trioWifiScale = 100, trioWifiStroke = 100,
                     trioNetworkScale = 100, trioNetworkWeight = 100, trioBatteryNumber = true,
                     trioBatteryScale = 100, trioBatteryWeight = 100) }
@@ -447,7 +466,7 @@ private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsSt
             Text("方案只保存在本机，包含圆环与呼吸灯颜色、圆环粗细、三合一样式、时钟显示、控件大小与应用侧圆角；不包含镜头位置校准、外屏背景、应用全屏名单、长按动作和总开关。应用方案后，可在对应页面撤销。",
                 color = uiColors().secondary, fontSize = 12.sp, lineHeight = 18.sp)
         } }
-        item { PresetSlots(store) }
+        item { presets() }
         }
         }
         panel.undoGroup?.let { group -> item { UndoGroupCard(store, group) } }
@@ -513,6 +532,10 @@ private fun FineStepButton(title: String, increase: Boolean, enabled: Boolean, o
 internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> Unit, about: () -> Unit, fullscreenApps: () -> Unit,
     chooseLongPressApp: (NavigationKey) -> Unit, manager: () -> Unit, selectPanel: (SettingsPanel) -> Unit,
     panel: SettingsPanel = SettingsPanel.MENU, back: () -> Unit = {}, scrollState: LazyListState? = null) {
+    if (panel == SettingsPanel.INPUT_METHOD) {
+        CoverInputMethodPage(store, c, back, scrollState)
+        return
+    }
     val screenshotScope by store.screenshotScope.collectAsState()
     val systemScope by store.systemScope.collectAsState()
     val connection by store.connection.collectAsState()
@@ -522,6 +545,7 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
     // Each category is a real saveable NavEntry, using the same push/pop animation as About.
     PageFrame(panel.title, onBack = if (panel == SettingsPanel.MENU) null else back, scrollState = scrollState) {
         when (panel) {
+        SettingsPanel.INPUT_METHOD -> Unit // Dedicated picker above shares this category's navigation entry.
         SettingsPanel.MENU -> {
         item { SmallTitle("外屏功能") }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
@@ -546,7 +570,7 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
             Text(when (c.background) {
                 CoverBackground.BLACK -> "使用纯黑侧区，不改变导航、圆环和通知。最近任务由下方开关独立控制。"
                 CoverBackground.SYSTEM -> "保留系统原本的背景，不改变导航、圆环和通知。"
-                CoverBackground.BLUR_FILL -> "试验：侧区与应用圆角外侧使用同一实时模糊背景，小组件展开时仍保留。无可用来源时不覆盖现有画面；系统关闭模糊的瞬间可能短暂变清晰。首次需加载新版系统界面与外屏桌面。"
+                CoverBackground.BLUR_FILL -> "试验：侧区与应用圆角外侧使用同一实时模糊背景，小组件展开时仍保留。无可用来源或系统报告模糊不可用时暂停填充，恢复后重新就绪。首次需加载新版系统界面与外屏桌面。"
              }, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp), color = uiColors().secondary, fontSize = 12.sp, lineHeight = 18.sp)
         } }
         item { SmallTitle("最近任务") }
@@ -579,7 +603,7 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
                 summary = "扩展外屏通知区域，控制中心保持原布局。镜头位置的内容可能被硬件遮住；关闭恢复原生布局。首次需系统界面加载新版。",
                 onCheckedChange = { value -> store.update { it.copy(notificationFullscreen = value) } })
             SwitchPreference(title = "隐藏外屏底部遮罩", checked = c.hideCoverBottomGuard,
-                summary = "只隐藏系统桌面底部防误触层的画面，保留原生输入区域。切换后重新进入外屏页面。",
+                summary = "隐藏底部防误触层，保留原生输入区域；有原生豁免接口的系统还会移除应用底部兼容留白。切换后需重新启动受影响应用；一代OS3暂仅支持前者。",
                 onCheckedChange = { value -> store.update { it.copy(hideCoverBottomGuard = value) } })
             if (c.hideCoverBottomGuard && (policy.loadedVersion ?: 0L) < com.flipduo.module.BottomGuardRules.POLICY_VERSION)
                 Text("这项需要系统框架加载新版；仅重载外屏桌面或系统界面不会生效。",

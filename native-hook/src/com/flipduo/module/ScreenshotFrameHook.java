@@ -34,11 +34,15 @@ final class ScreenshotFrameHook {
                 return result;
             });
         } else {
-            module.hook(api.legacyCapture).intercept(chain -> {
-                Object result = chain.proceed(); // The OEM still enforces all capture/secure-layer policy.
-                if (result instanceof Bitmap image && isFullCover(image))
-                    remember(image, (Display) api.legacyDisplay.invoke(null, (Context) chain.getArg(0)));
-                return result;
+            for (var caller : api.legacyCallers)
+                if (!module.deoptimize(caller)) NativeModule.info("Legacy screenshot caller deoptimization unavailable: " + caller.getName());
+            module.hook(api.legacyComplete).intercept(chain -> {
+                // The worker has already finished OEM capture and its permission checks.
+                // Register before this callback starts the original export/thumbnail path.
+                Object owner = chain.getArg(0);
+                Bitmap image = (Bitmap) api.legacyBitmap.get(owner);
+                if (isFullCover(image)) remember(image, (Display) api.legacyDisplay.invoke(null, (Context) api.legacyContext.get(owner)));
+                return chain.proceed();
             });
         }
         module.hook(api.save).intercept(chain -> {
@@ -60,7 +64,7 @@ final class ScreenshotFrameHook {
                     + " rotation=" + rotation + " format=PNG alpha=" + framed.hasAlpha());
             return chain.proceed(args);
         });
-        NativeModule.info("Cover screenshot export installed: device-selected artwork, " + (api.modern() ? "metadata" : "native-completed-capture") + "; unprofiled devices retain original pixels");
+        NativeModule.info("Cover screenshot export installed: device-selected artwork, " + (api.modern() ? "metadata" : "native-completed-callback") + "; unprofiled devices retain original pixels");
     }
 
     private static void remember(Bitmap image, Display display) {

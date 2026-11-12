@@ -54,7 +54,7 @@ internal fun LongPressAppsPage(store: ControlsStore, controls: Controls, key: Na
         val text = query.trim()
         apps.filter { it.label.contains(text, true) || it.pkg.contains(text, true) }
     }
-    PageFrame("${key.title}打开的应用", onBack = back, actions = { TextButton(text = "刷新", onClick = { refresh++ }) }) {
+    PageFrame("${key.title}打开的应用", onBack = back, actions = { ManagerActionButton(text = "刷新", compact = true, onClick = { refresh++ }) }) {
         item { TextField(value = query, onValueChange = { query = it }, label = "搜索应用名称或包名", useLabelAsPlaceholder = true,
             singleLine = true, modifier = Modifier.fillMaxWidth().testTag("long_press_app_search")) }
         item { Text("选择后保存为该键的长按动作。返回不改变原设置；只列出有公开桌面入口的应用。",

@@ -3,6 +3,7 @@ package com.flipduo.module.ui
 internal enum class SettingsPanel(val title: String, val summary: String) {
     MENU("设置", ""),
     BEHAVIOR("外屏行为", "事件岛、横屏与状态栏"),
+    INPUT_METHOD("外屏输入法", "单独选择外屏使用的键盘"),
     NAVIGATION("导航键长按", "返回、桌面与最近任务"),
     FEEDBACK("触感与动画", "控件反馈与过渡时长"),
     SCREENSHOTS("外屏截图", "带壳截图与截图作用域"),

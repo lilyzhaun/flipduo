@@ -62,7 +62,7 @@ internal fun RuntimeStatusPage(store: ControlsStore, c: Controls, back: () -> Un
             BasicComponent(title = "应用全屏策略", summary = policy.summary)
         } }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-            TextButton(text = "刷新", onClick = store::refreshRuntime, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))
+            ManagerActionButton(text = "刷新", onClick = store::refreshRuntime, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))
             Spacer(Modifier.height(8.dp))
             Text("刷新只重新查询，并重试未完成的同步；不修改设置，也不重新加载宿主。功能状态来自最近回执，“已就绪”不代表当前正在接管；可选功能不可用不影响导航。",
                 color = colors.secondary, fontSize = 12.sp, lineHeight = 18.sp)

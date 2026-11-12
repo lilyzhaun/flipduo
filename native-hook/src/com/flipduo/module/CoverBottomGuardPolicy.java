@@ -2,15 +2,22 @@
 package com.flipduo.module;
 
 import android.content.SharedPreferences;
+import android.content.Context;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.os.Binder;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 import io.github.libxposed.api.XposedInterface;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
 
-/** Rendering-only handling of the native launcher overlay in the existing system scope.
+/** Native launcher overlay and optional OEM app-bottom exemption in the existing system scope.
  * The launcher has no DEX on bixi OS4; hooking a Java View there would miss this window. */
 final class CoverBottomGuardPolicy {
     private final SharedPreferences preferences;
@@ -50,7 +57,53 @@ final class CoverBottomGuardPolicy {
             try { return chain.proceed(); }
             finally { alpha.setFloat(current, original); }
         });
-        NativeModule.info("Bottom guard rendering policy v127 installed; exact inert launcher overlay only");
+        hookCompatBottomExemption(module, loader);
+        NativeModule.info("Bottom guard rendering policy v130 installed; exact inert launcher overlay");
+    }
+
+    private void hookCompatBottomExemption(NativeModule module, ClassLoader loader) {
+        try {
+            Class<?> service = loader.loadClass("com.android.server.wm.MiuiSizeCompatService");
+            Method skip = service.getDeclaredMethod("getSkipBottomInsetsActivities", String.class);
+            Field context = field(service, "mContext");
+            Method packageInfo = PackageManager.class.getDeclaredMethod("getPackageInfoAsUser", String.class, int.class, int.class);
+            skip.setAccessible(true); packageInfo.setAccessible(true);
+            module.hook(skip).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                Object original = chain.proceed();
+                if (!enabled) return original;
+                String pkg = (String) chain.getArg(0);
+                if (pkg == null || pkg.isEmpty()) return original;
+                PackageManager pm = ((Context) context.get(chain.getThisObject())).getPackageManager();
+                // Android UIDs encode the profile in PER_USER_RANGE (100000); do not query
+                // user 0 for a cloned/work-profile caller. This is the OEM's app query, not a scan.
+                PackageInfo info;
+                try {
+                    info = (PackageInfo) packageInfo.invoke(pm, pkg,
+                            PackageManager.GET_ACTIVITIES | PackageManager.MATCH_DISABLED_COMPONENTS, Binder.getCallingUid() / 100000);
+                } catch (ReflectiveOperationException error) {
+                    NativeModule.warning("App bottom exemption package lookup unavailable; OEM result retained", error);
+                    return original;
+                }
+                return bottomExemptions(original, info, pkg);
+            });
+            // bixi OS4 BoundsCompat caches this per process. Both enabling and disabling
+            // require restarting affected apps. The native client retains its display,
+            // rotation and size-compat checks, and only omits the synthetic 21px bottom.
+            NativeModule.info("Native app bottom exemption available; restart affected apps after toggling");
+        } catch (ReflectiveOperationException error) {
+            // ruyi OS3 has the 21px branch but no service exemption API. Do not substitute
+            // the broader no-insets list: that also removes the original top inset.
+            NativeModule.info("Native app bottom exemption unavailable; launcher overlay policy remains active");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static Object bottomExemptions(Object original, PackageInfo info, String pkg) {
+        if (!(original instanceof Map<?, ?>) || info == null || info.activities == null) return original;
+        Map<String, String> result = new HashMap<>((Map<String, String>) original);
+        for (ActivityInfo activity : info.activities)
+            if (pkg.equals(activity.packageName) && activity.name != null) result.putIfAbsent(activity.name, "");
+        return result;
     }
     private void read() {
         enabled = preferences.getBoolean("enabled", true) && preferences.getBoolean(BottomGuardRules.KEY, false);

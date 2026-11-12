@@ -9,7 +9,7 @@ package com.flipduo.module.ui
 internal enum class SettingsGroup(val title: String) {
     CONTROLS("控件布局"), CAMERA("镜头圆环"), STATUS("时钟显示"), TRIO("三合一"), CORNERS("应用侧圆角"),
     BEHAVIOR("外屏行为"), NAVIGATION("导航键长按"), FEEDBACK("触感与动画"), SCREENSHOTS("外屏截图"),
-    COMPATIBILITY("兼容设置"), FULLSCREEN("应用全屏");
+    COMPATIBILITY("兼容设置"), FULLSCREEN("应用全屏"), INPUT_METHOD("外屏输入法");
 
     /** This group's business values, compared to detect which groups a commit touched. */
     fun values(c: Controls): List<Any?> = when (this) {
@@ -30,6 +30,7 @@ internal enum class SettingsGroup(val title: String) {
         SCREENSHOTS -> listOf(c.framedScreenshots)
         COMPATIBILITY -> listOf(c.unrestrictCoverApps, c.innerRecentsCompat)
         FULLSCREEN -> listOf(c.fullscreenApps, c.fullscreenScales, c.hideFullscreenButtons, c.trueFullscreenApps)
+        INPUT_METHOD -> listOf(c.coverInputMethod, c.coverInputMethodUser)
     }
 
     /** [target] with only this group's fields taken from [from]; revision and every other group stay as in [target]. */
@@ -66,6 +67,7 @@ internal enum class SettingsGroup(val title: String) {
         FULLSCREEN -> target.copy(fullscreenApps = from.fullscreenApps, fullscreenScales = from.fullscreenScales,
             trueFullscreenApps = from.trueFullscreenApps,
             hideFullscreenButtons = from.hideFullscreenButtons)
+        INPUT_METHOD -> target.copy(coverInputMethod = from.coverInputMethod, coverInputMethodUser = from.coverInputMethodUser)
     }
 
     companion object {

@@ -29,8 +29,7 @@ import java.util.List;
 
 /** SystemUI's existing Shell task leash supplies a live compositor mirror, never a screenshot/readback. */
 final class BlurFillSource {
-    // User explicitly requested the live-mirror trial first, accepting that system blur-disable
-    // handling is deferred. This is an experiment, not a guarantee against a transient clear frame.
+    // Live compositor path; actual cross-window blur availability gates presentation on both hosts.
     static boolean renderingAllowed() { return true; }
     private static BlurFillSource instance;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -47,16 +46,32 @@ final class BlurFillSource {
     private SurfaceControl activeLeash;
     private Rect activeSource;
     private boolean ready, reported, started, sceneCommitted, expanded;
+    private boolean reportedCorners;
+    private int statusSequence, reportedControlSequence = -1;
     private final Runnable reconcile = this::reconcileOnMain;
 
     private static final class Request {
         IBinder owner;
         IBinder.DeathRecipient death;
-        int sequence, display, rotation, firstRadius, lastRadius;
+        int sequence, display, rotation, firstRadius, lastRadius, controlSequence;
         UserHandle user;
-        SurfaceControl target, plane;
+        SurfaceControl target, plane; // Owned background-below-window and app-restoration-above-window handles.
         Rect destination, viewport, side;
         boolean retained;
+        private boolean surfacesReleased;
+
+        // Shell runs off the SystemUI main looper. SurfaceControl's native-pointer check and
+        // JNI use are not atomic with release() on either verified ROM. Keep the request's
+        // two owned handles alive through that JNI call, including a hook holding a stale Request.
+        synchronized void restrictTransition(SurfaceControl.Transaction transaction) throws ReflectiveOperationException {
+            if (!surfacesReleased) BlurFillSurface.clip(transaction, target, plane, side);
+        }
+        synchronized void releaseSurfaces() {
+            if (surfacesReleased) return;
+            surfacesReleased = true;
+            plane.release();
+            target.release();
+        }
     }
 
     private BlurFillSource(ClassLoader loader) throws ReflectiveOperationException {
@@ -91,7 +106,7 @@ final class BlurFillSource {
             NativeModule.warning("Blur-fill transition boundary unavailable; static extension stays hidden", error);
         }
         instance = source;
-        NativeModule.info("v6.95 fixed live blur-fill task hooks installed; clear extension waits for Shell idle and mirror commit");
+        NativeModule.info("Blur-fill v148 native-window source installed; background below window, app-only restoration above; pipeline=7");
     }
     private void installTransitions(NativeModule module, ClassLoader loader) throws ReflectiveOperationException {
         Class<?> type = loader.loadClass("com.android.wm.shell.transition.Transitions");
@@ -117,7 +132,7 @@ final class BlurFillSource {
             // Add restriction to the REAL transition start transaction, before an incoming task can
             // move. No mirror transform, pixel sampling, or additional surface is calculated.
             if (current != null) try {
-                BlurFillSurface.clip((SurfaceControl.Transaction) chain.getArg(2), current.target, current.plane, current.side);
+                current.restrictTransition((SurfaceControl.Transaction) chain.getArg(2));
             } catch (ReflectiveOperationException | RuntimeException error) {
                 NativeModule.warning("Could not restrict blur-fill at transition start", error);
             }
@@ -155,10 +170,20 @@ final class BlurFillSource {
                 else source.schedule();
             }
         }, events, null, source.main, Context.RECEIVER_NOT_EXPORTED);
-        context.getSystemService(WindowManager.class).addCrossWindowBlurEnabledListener(context.getMainExecutor(), enabled -> source.schedule());
+        context.getSystemService(WindowManager.class).addCrossWindowBlurEnabledListener(context.getMainExecutor(), source::onBlurChanged);
         source.started = true;
         context.sendBroadcast(new Intent(BlurFillHost.STATE).setPackage("com.miui.fliphome")
                 .putExtra("available", true).putExtra("pipeline", BlurFillHost.PIPELINE), StatusWire.PERMISSION);
+    }
+
+    private boolean blurAvailable() {
+        return context != null && context.getSystemService(WindowManager.class).isCrossWindowBlurEnabled();
+    }
+    private void onBlurChanged(Boolean ignored) {
+        boolean available = blurAvailable();
+        NativeModule.info("Blur-fill availability=" + available);
+        if (!available) { dropLayers(); report(false); }
+        schedule();
     }
 
     private void receive(Intent intent) {
@@ -173,8 +198,12 @@ final class BlurFillSource {
         }
         if (intent.getBooleanExtra("control", false)) {
             if (request != null && request.owner.equals(owner) && sequence == request.sequence) {
-                request.retained = intent.getBooleanExtra("retain", false); schedule();
+                int control = intent.getIntExtra("control_sequence", -1);
+                if (control < request.controlSequence) return;
+                request.controlSequence = control;
+                request.retained = intent.getBooleanExtra("retain", false);
                 if (!request.retained && idle != null) idle.invalidate();
+                restrictAndSchedule();
             }
             return;
         }
@@ -183,9 +212,10 @@ final class BlurFillSource {
         Rect destination = intent.getParcelableExtra("destination", Rect.class);
         Rect viewport = intent.getParcelableExtra("viewport", Rect.class);
         int rotation = intent.getIntExtra("rotation", -1), display = intent.getIntExtra("display", -1);
+        int controlSequence = intent.getIntExtra("control_sequence", -1);
         int firstRadius = intent.getIntExtra("first_radius", -1), lastRadius = intent.getIntExtra("last_radius", -1);
         UserHandle user = intent.getParcelableExtra("user", UserHandle.class);
-        if (sequence < 0 || target == null || !target.isValid() || destination == null || destination.isEmpty()
+        if (sequence < 0 || controlSequence < 0 || target == null || !target.isValid() || destination == null || destination.isEmpty()
                 || plane == null || !plane.isValid() || viewport == null || viewport.isEmpty()
                 || intent.getIntExtra("pipeline", -1) != BlurFillHost.PIPELINE
                 || user == null || rotation < 0 || rotation > 3 || destination.left != 0 || destination.top != 0
@@ -200,10 +230,11 @@ final class BlurFillSource {
         next.plane = plane; next.viewport = viewport; next.firstRadius = firstRadius; next.lastRadius = lastRadius;
         next.side = BlurFillGeometry.destination(rotation, viewport.left, viewport.top, viewport.width(), viewport.height());
         next.retained = intent.getBooleanExtra("retain", false);
+        next.controlSequence = controlSequence;
         next.death = () -> main.post(() -> { if (request == next) releaseRequest(); });
         try { owner.linkToDeath(next.death, 0); }
         catch (RemoteException error) { target.release(); plane.release(); return; }
-        request = next; schedule();
+        request = next; statusSequence = 0; reportedControlSequence = -1; schedule();
         checkedTask = -1;
         if (idle != null) idle.invalidate();
     }
@@ -211,7 +242,7 @@ final class BlurFillSource {
     private void reconcileOnMain() {
         Request current = request;
         if (context == null || current == null) return;
-        if (!renderingAllowed()) { dropLayers(); report(false); return; }
+        if (!renderingAllowed() || !blurAvailable()) { dropLayers(); report(false); return; }
         DockConfig config = NativeModule.config();
         if (!current.target.isValid() || !current.plane.isValid()) { releaseRequest(); return; }
         // The two hosts receive remote preferences independently. Retain the request while SystemUI
@@ -223,7 +254,7 @@ final class BlurFillSource {
             if (display == null || display.getState() != Display.STATE_ON || display.getRotation() != current.rotation
                     || !CutoutAppConfig.isCoverDisplay(metrics.widthPixels, metrics.heightPixels)
                     || context.getSystemService(KeyguardManager.class).isKeyguardLocked()
-                    || !context.getSystemService(WindowManager.class).isCrossWindowBlurEnabled() || organizer == null) {
+                    || organizer == null) {
                 dropLayers(); report(false); return;
             }
             // A gesture or the shared column's exit tail owns the existing mirror, not a new top task.
@@ -267,22 +298,26 @@ final class BlurFillSource {
             }
             Rect app = BlurFillGeometry.appDestination(source, taskBounds, current.viewport);
             surfaces.show(current.target, current.plane, leash, source, current.destination, current.side, app,
-                    current.firstRadius, current.lastRadius, CoverRotation.landscape(current.rotation), command -> main.post(command), () -> {
-                if (request != current || activeTask != task.taskId || activeLeash != leash || activeSource != source) return;
-                sceneCommitted = true;
-                try { presentation(!current.retained && idle != null && idle.settled(), false); }
-                catch (ReflectiveOperationException | RuntimeException error) {
-                    dropLayers(); report(false); NativeModule.warning("Could not restore settled blur-fill corners", error); return;
-                }
-                report(true);
-                NativeModule.info("Blur-fill committed task=" + task.taskId + " sequence=" + current.sequence);
-            });
+                    current.firstRadius, current.lastRadius, CoverRotation.landscape(current.rotation), command -> main.post(command),
+                    () -> onSceneCommitted(current, task.taskId, leash, source));
             activeTask = task.taskId; activeLeash = leash; activeSource = source;
             sceneCommitted = expanded = false;
             NativeModule.info("Blur-fill task=" + task.taskId + " source=" + source + " destination=" + current.destination + " GPU-live=true");
         } catch (ReflectiveOperationException | RuntimeException error) {
             dropLayers(); report(false); NativeModule.warning("Live blur-fill unavailable; no replacement fill", error);
         }
+    }
+    private void onSceneCommitted(Request current, int taskId, SurfaceControl leash, Rect source) {
+        if (request != current || activeTask != taskId || activeLeash != leash || activeSource != source) return;
+        // A compositor commit confirms a transaction, not that blur is still enabled.
+        if (!blurAvailable()) { dropLayers(); report(false); return; }
+        sceneCommitted = true;
+        try { presentation(!current.retained && idle != null && idle.settled(), false); }
+        catch (ReflectiveOperationException | RuntimeException error) {
+            dropLayers(); report(false); NativeModule.warning("Could not restore settled blur-fill corners", error); return;
+        }
+        report(true);
+        if (ready) NativeModule.info("Blur-fill committed task=" + taskId + " sequence=" + current.sequence);
     }
     private void presentation(boolean corners, boolean force) throws ReflectiveOperationException {
         Request current = request;
@@ -292,15 +327,21 @@ final class BlurFillSource {
             tx.apply();
         }
         expanded = corners;
+        if (reported && ready) report(true);
     }
     private void report(boolean value) {
         report(value, false);
     }
     private void report(boolean value, boolean terminated) {
-        if (request == null || !terminated && reported && ready == value) return;
+        if (value && !blurAvailable()) { dropLayers(); value = false; }
+        if (request == null || !terminated && reported && ready == value && reportedCorners == expanded
+                && reportedControlSequence == request.controlSequence) return;
         ready = value; reported = true;
+        reportedCorners = expanded; reportedControlSequence = request.controlSequence;
         Intent state = new Intent(BlurFillHost.STATE).setPackage("com.miui.fliphome").putExtra("sequence", request.sequence)
-                .putExtra("ready", ready).putExtra("terminated", terminated).putExtra("pipeline", BlurFillHost.PIPELINE);
+                .putExtra("ready", ready).putExtra("terminated", terminated).putExtra("pipeline", BlurFillHost.PIPELINE)
+                .putExtra("corners", expanded).putExtra("control_sequence", request.controlSequence)
+                .putExtra("status_sequence", ++statusSequence);
         Bundle binders = new Bundle(); binders.putBinder("owner", request.owner); binders.putBinder("life", life); state.putExtras(binders);
         context.sendBroadcast(state, StatusWire.PERMISSION);
     }
@@ -311,8 +352,12 @@ final class BlurFillSource {
         catch (RuntimeException error) { NativeModule.warning("Could not remove blur-fill mirror", error); }
     }
     private void releaseRequest() {
+        Request previous = request;
         dropLayers(); report(false, true);
-        if (request != null) { request.owner.unlinkToDeath(request.death, 0); request.target.release(); request.plane.release(); }
         request = null; ready = reported = false;
+        if (previous != null) {
+            previous.owner.unlinkToDeath(previous.death, 0);
+            previous.releaseSurfaces();
+        }
     }
 }

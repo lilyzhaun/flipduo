@@ -15,7 +15,7 @@ public final class CutoutAppConfig {
     public static final String TRUE_FULLSCREEN_KEY = "cutout_true_fullscreen_apps";
     public static final int DEFAULT_SCALE = 80, MIN_SCALE = 70, MAX_SCALE = 110;
     public static final long SCALING_POLICY_VERSION = 29;
-    public static final long FULLSCREEN_POLICY_VERSION = 124;
+    public static final long FULLSCREEN_POLICY_VERSION = 135;
 
     private CutoutAppConfig() {}
 
