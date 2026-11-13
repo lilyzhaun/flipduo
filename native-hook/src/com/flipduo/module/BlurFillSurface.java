@@ -13,6 +13,7 @@ import java.util.concurrent.Executor;
 final class BlurFillSurface {
     private final Constructor<?> builder;
     private final Method name, parent, containerLayer, build, mirrorSurface, cornerRadius, colorTransform;
+    private final Method cornerRadii;
     private Scene active;
 
     private final class Scene {
@@ -44,6 +45,16 @@ final class BlurFillSurface {
         mirrorSurface = SurfaceControl.class.getMethod("mirrorSurface", SurfaceControl.class);
         Class<?> tx = SurfaceControl.Transaction.class;
         cornerRadius = tx.getMethod("setCornerRadius", SurfaceControl.class, float.class);
+        Method independentCorners;
+        try {
+            // Verified on ruyi OS3 and bixi OS4. One continuous restoration mirror avoids
+            // separately compositing two copies of the app at the old half-screen seam.
+            independentCorners = tx.getMethod("setMiCornerRadii", SurfaceControl.class, float[].class);
+        } catch (NoSuchMethodException unavailable) {
+            independentCorners = null;
+            NativeModule.info("Blur-fill per-corner transaction unavailable; retaining legacy split restoration");
+        }
+        cornerRadii = independentCorners;
         colorTransform = tx.getMethod("setColorTransform", SurfaceControl.class, float[].class, float[].class);
     }
 
@@ -137,7 +148,7 @@ final class BlurFillSurface {
                 tx.reparent(mirror, next.backdrop).setLayer(mirror, 0).setCrop(mirror, source)
                         .setScale(mirror, sx, sy).setPosition(mirror, -source.left * sx, -source.top * sy);
                 colorTransform.invoke(tx, mirror, BlurFillColors.colorMatrix(), new float[]{0,0,0});
-                int parts = firstRadius == lastRadius ? 1 : 2;
+                int parts = firstRadius == lastRadius || cornerRadii != null ? 1 : 2;
                 for (int i = 0; i < parts; i++) {
                     Rect clip = parts == 1 ? destination : BlurFillGeometry.half(destination, appDestination, horizontal, i == 1);
                     if (clip.isEmpty()) continue;
@@ -147,7 +158,13 @@ final class BlurFillSurface {
                     tx.setLayer(half, i).setCrop(half, clip);
                     tx.setPosition(rounded, appDestination.left, appDestination.top)
                             .setCrop(rounded, new Rect(0, 0, source.width(), source.height()));
-                    cornerRadius.invoke(tx, rounded, (float) (i == 0 ? firstRadius : lastRadius));
+                    if (parts == 1 && firstRadius != lastRadius) {
+                        // Xiaomi's eight-value API uses Canvas order: TL, TR, BR, BL (x/y pairs).
+                        float first = firstRadius, last = lastRadius;
+                        float[] radii = horizontal ? new float[]{first,first,last,last,last,last,first,first}
+                                : new float[]{first,first,first,first,last,last,last,last};
+                        cornerRadii.invoke(tx, rounded, radii);
+                    } else cornerRadius.invoke(tx, rounded, (float) (i == 0 ? firstRadius : lastRadius));
                     tx.reparent(clear, rounded).setLayer(clear, 0).setCrop(clear, source)
                             .setPosition(clear, -source.left, -source.top);
                 }

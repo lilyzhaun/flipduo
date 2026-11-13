@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.143（154）** 的生产源码与必要构建文件，应用现有界面文案保留。
+FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.144（155）** 的生产源码与必要构建文件，应用现有界面文案保留。
 
 ## 功能
 
@@ -21,6 +21,8 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 目标环境为初代 MIX Flip（`ruyi`）HyperOS 3，以及 MIX Flip 2（`bixi`）HyperOS 3／4。固件相关行为需要在对应设备上验证，兼容目标不代表每项功能已在所有固件上通过验收。
 
 本版本已获MIX Flip 2／HyperOS 4用户验收；初代HyperOS 3以ROM接口核对为依据，MIX Flip 2／HyperOS 3仍待独立固件及实机验证。实时模糊仍属试验功能，表现可能随视频内容和固件变化。
+
+系统支持四角图层事务时，实时模糊采用连续的应用边缘还原，在保留不同圆角半径的同时避免分割还原画面。缺少该接口的固件保留旧还原路径，该回退路径尚未独立验证白条修正效果。
 
 带壳截图适配已核对的系统截图1.6.3.44，同时保留旧现代管线与一代旧版流程；未知后续截图版本可能仍需单独适配。快速重启发送结束进程请求，由系统按需重新创建宿主；请求已发送不代表新版模块已加载。
 
@@ -70,7 +72,7 @@ app/build/outputs/apk/release/app-release-unsigned.apk
 
 ## 对应版本源码
 
-请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.143`](https://github.com/lilyzhaun/flipduo/tree/v0.6.143)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.143)，此前源码标签继续保留。
+请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.144`](https://github.com/lilyzhaun/flipduo/tree/v0.6.144)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.144)，此前源码标签继续保留。
 
 公开构建配置移除了私有仪器测试依赖和本机SDK路径，提供构建该版本所需的生产源码；它不承诺逐字节复现发布者签名后的APK。
 
