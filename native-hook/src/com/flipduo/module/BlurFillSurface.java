@@ -9,7 +9,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.concurrent.Executor;
 
-/** Task mirror below the existing window; app-only restoration above it. No captured pixels or task mutations. */
+/** Background below controls; app-edge material and restoration share a visibility gate above it. */
 final class BlurFillSurface {
     private final Constructor<?> builder;
     private final Method name, parent, containerLayer, build, mirrorSurface, cornerRadius, colorTransform;
@@ -18,7 +18,7 @@ final class BlurFillSurface {
 
     private final class Scene {
         final ArrayList<SurfaceControl> layers = new ArrayList<>();
-        SurfaceControl backdrop, app, plane;
+        SurfaceControl backdrop, app, plane, target;
         SurfaceControl layer(String label, SurfaceControl target) throws ReflectiveOperationException {
             Object b = builder.newInstance(); name.invoke(b, label); parent.invoke(b, target);
             containerLayer.invoke(b);
@@ -68,12 +68,14 @@ final class BlurFillSurface {
                 && (Boolean) SurfaceControl.class.getMethod("isSameSurface", SurfaceControl.class).invoke(a, b);
     }
     static final class Targets {
-        final SurfaceControl background, foreground;
-        Targets(SurfaceControl background, SurfaceControl foreground) { this.background = background; this.foreground = foreground; }
+        final SurfaceControl gate, appGate, background, foreground;
+        Targets(SurfaceControl gate, SurfaceControl appGate, SurfaceControl background, SurfaceControl foreground) {
+            this.gate = gate; this.appGate = appGate; this.background = background; this.foreground = foreground;
+        }
     }
     static Targets destinations(View view, SurfaceControl window, Rect rect) throws ReflectiveOperationException {
         SurfaceControl windowContainer = null;
-        SurfaceControl background = null, foreground = null;
+        SurfaceControl gate = null, appGate = null, background = null, foreground = null;
         try {
             Method getRoot = View.class.getDeclaredMethod("getViewRootImpl"); getRoot.setAccessible(true);
             Object root = getRoot.invoke(view);
@@ -81,19 +83,22 @@ final class BlurFillSurface {
                     .getMethod("getParentSurfaceControl").invoke(root);
             if (windowContainer == null || !windowContainer.isValid())
                 throw new ReflectiveOperationException("Native window container is unavailable");
-            // The sampled background stays an absolute sibling below the window (relative-z
+            // The background subtree stays an absolute sibling below the window (relative-z
             // would join its sampling-excluded subtree). Restoration belongs above that buffer
             // and is anchored to it; never assume a fixed OEM content-layer z value.
-            background = container("FlipDuo blur-fill host", windowContainer, rect, -1);
-            foreground = container("FlipDuo app-restore host", windowContainer, rect, 1);
+            // Local gesture permission and remote Shell permission must not write the same crop.
+            gate = container("FlipDuo blur local gate", windowContainer, rect, -1);
+            background = container("FlipDuo blur-fill host", gate, rect, 0);
+            appGate = container("FlipDuo app local gate", windowContainer, rect, 1);
+            foreground = container("FlipDuo app-restore host", appGate, rect, 0);
             try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
                 SurfaceControl.Transaction.class.getMethod("setRelativeLayer", SurfaceControl.class, SurfaceControl.class, int.class)
-                        .invoke(tx, foreground, window, 1);
+                        .invoke(tx, appGate, window, 1);
                 tx.apply();
             }
-            return new Targets(background, foreground);
+            return new Targets(gate, appGate, background, foreground);
         } catch (ReflectiveOperationException | RuntimeException error) {
-            remove(foreground); remove(background); throw error;
+            remove(foreground); remove(appGate); remove(background); remove(gate); throw error;
         } finally { if (windowContainer != null) windowContainer.release(); }
     }
     private static SurfaceControl container(String label, SurfaceControl parent, Rect rect, int layer) throws ReflectiveOperationException {
@@ -116,9 +121,12 @@ final class BlurFillSurface {
                 && root != null && root.applyTransactionOnDraw(tx)) view.invalidate();
         else tx.apply();
     }
-    static void clip(SurfaceControl.Transaction tx, SurfaceControl target, SurfaceControl plane, Rect clip)
+    static void clip(SurfaceControl.Transaction tx, SurfaceControl target, SurfaceControl plane, Rect clip, boolean corners)
             throws ReflectiveOperationException {
         tx.setCrop(target, clip).setCrop(plane, clip);
+        // The plane owns the app-edge blur as well as its clear restoration. Hide it as a unit;
+        // a parent surface crop is not a substitute for changing native BlurRegion geometry.
+        tx.setVisibility(plane, corners);
     }
     static void remove(SurfaceControl surface) {
         if (surface == null) return;
@@ -135,6 +143,7 @@ final class BlurFillSurface {
         Scene next = new Scene(), previous = active;
         try {
             next.plane = plane;
+            next.target = target;
             next.backdrop = next.layer("FlipDuo blur-fill", target);
             next.app = next.layer("FlipDuo app viewport", plane);
             SurfaceControl mirror = next.mirror(task);
@@ -142,7 +151,7 @@ final class BlurFillSurface {
             try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
                 // A new task always starts side-only. A committed mirror is not proof that the
                 // real task's transition has ended; the source expands only at the Shell idle boundary.
-                clip(tx, target, plane, side);
+                clip(tx, target, plane, side, false);
                 tx.setLayer(next.backdrop, 0).setCrop(next.backdrop, destination);
                 tx.setLayer(next.app, 0).setCrop(next.app, destination);
                 tx.reparent(mirror, next.backdrop).setLayer(mirror, 0).setCrop(mirror, source)
@@ -169,7 +178,7 @@ final class BlurFillSurface {
                             .setPosition(clear, -source.left, -source.top);
                 }
                 if (previous != null) previous.detach(tx);
-                tx.setVisibility(plane, true); // Re-enable the foreground after retiring the old scene.
+                tx.setVisibility(target, true);
                 for (SurfaceControl layer : next.layers) tx.setVisibility(layer, true);
                 tx.addTransactionCommittedListener(executor, committed::run).apply();
             }
@@ -185,7 +194,11 @@ final class BlurFillSurface {
         Scene previous = active; active = null;
         if (previous == null) return;
         try {
-            try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) { previous.detach(tx); tx.apply(); }
+            try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
+                // A missing source must not leave the host's blur sampling the native letterbox
+                // until an asynchronous not-ready broadcast reaches FlipHome.
+                previous.detach(tx); tx.setVisibility(previous.target, false); tx.apply();
+            }
         } finally { previous.release(); }
     }
 }

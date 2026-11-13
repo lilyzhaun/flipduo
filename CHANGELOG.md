@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.147
+
+Cumulative fixes since 0.6.144:
+
+- Fix app-edge blur overlap during page transitions and recent-task gestures.
+- Match corner fill colors to the side backdrop while preserving the existing corner radii.
+- Fix the transient app-edge white strip when returning from the notification shade.
+- Restore framed PNG screenshots with system Screenshot 1.6.3.47, retaining the verified 1.6.3.44 and older capture paths.
+
+These fixes are user-accepted on MIX Flip 2 / HyperOS 4. Other target environments retain the verification limits described in the README. Reload FlipHome and System UI after updating so both hosts use the new module code.
+
 ## 0.6.144
 
 - Fix the reported white-strip flash at the app edge when pulling down the notification shade or switching pages with live blur fill enabled.

@@ -22,7 +22,7 @@ import java.util.function.Consumer;
 final class BlurFillHost {
     static final String REQUEST = "com.flipduo.module.BLUR_FILL_REQUEST";
     static final String STATE = "com.flipduo.module.BLUR_FILL_STATE";
-    static final int PIPELINE = 7;
+    static final int PIPELINE = 9;
     private final WeakReference<ViewGroup> root;
     private final Context context;
     private final WindowManager windowManager;
@@ -50,22 +50,30 @@ final class BlurFillHost {
     private int sequence, display, rotation, firstRadius, lastRadius;
     private int controlSequence, lastStatus = -1;
     private Rect viewport, body;
-    private SurfaceControl window, target, plane;
-    private BlurFillWindowBlur windowBlur;
+    private SurfaceControl window, gate, appGate, target, plane;
+    private BlurFillMaterial material, extensionMaterial;
     private final ArrayList<Retired> retired = new ArrayList<>();
     private final class Retired {
-        final SurfaceControl target, plane;
+        final SurfaceControl gate, appGate, target, plane;
+        final BlurFillMaterial material, extensionMaterial;
         final int sequence;
         final boolean sent;
         boolean complete;
-        Retired(SurfaceControl target, SurfaceControl plane, int sequence, boolean sent) {
+        Retired(SurfaceControl gate, SurfaceControl appGate, SurfaceControl target, SurfaceControl plane, BlurFillMaterial material, BlurFillMaterial extensionMaterial, int sequence, boolean sent) {
+            this.gate = gate; this.appGate = appGate;
             this.target = target; this.plane = plane; this.sequence = sequence; this.sent = sent;
+            this.material = material;
+            this.extensionMaterial = extensionMaterial;
         }
         void finish() {
             if (complete) return;
             complete = true; retired.remove(this);
+            if (extensionMaterial != null) extensionMaterial.close();
+            if (material != null) material.close();
             if (plane != null) plane.release();
+            appGate.release();
             target.release();
+            gate.release();
             if (sent) sendRelease(sequence);
         }
         void removeNow() {
@@ -73,6 +81,8 @@ final class BlurFillHost {
             try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
                 if (target.isValid()) tx.setVisibility(target, false).reparent(target, null);
                 if (plane != null && plane.isValid()) tx.setVisibility(plane, false).reparent(plane, null);
+                if (appGate.isValid()) tx.setVisibility(appGate, false).reparent(appGate, null);
+                if (gate.isValid()) tx.setVisibility(gate, false).reparent(gate, null);
                 tx.apply();
             } finally { finish(); }
         }
@@ -163,12 +173,14 @@ final class BlurFillHost {
                 releaseTarget(); window = surface;
                 Rect frame = new Rect(0, 0, nextViewport.width(), nextViewport.height());
                 BlurFillSurface.Targets layers = BlurFillSurface.destinations(view, surface, frame);
-                target = layers.background; plane = layers.foreground;
-                windowBlur = new BlurFillWindowBlur(view);
-                windowBlur.background(view.getBackground());
+                gate = layers.gate; appGate = layers.appGate; target = layers.background; plane = layers.foreground;
+                material = new BlurFillMaterial(view, target, rect, 1, null, changed);
+                Rect extension = BlurFillGeometry.extension(frame.width(), frame.height(), rect);
+                if (!extension.isEmpty()) extensionMaterial = new BlurFillMaterial(view, plane, extension, -1, target, changed);
                 display = id; rotation = actualRotation; viewport = nextViewport; body = rect;
                 this.firstRadius = firstRadius; this.lastRadius = lastRadius;
             }
+            if (!material.ready() || extensionMaterial != null && !extensionMaterial.ready()) return false;
             if (!sent && !requestPending) requestOnDraw(view);
             else if (sent && sourceChanged) {
                 Intent control = new Intent(REQUEST).setPackage("com.android.systemui").putExtra("sequence", sequence)
@@ -177,13 +189,13 @@ final class BlurFillHost {
                 if (!liveSource) context.sendBroadcast(control, StatusWire.PERMISSION);
                 else try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
                     int expected = sequence, expectedControl = controlSequence;
-                    // Drain the gesture's local restrict-on-draw before allowing SystemUI to expand.
-                    // Otherwise a delayed old crop could land AFTER the source's settled restore.
+                    // Commit the local restriction before asking SystemUI to expand. Local gating
+                    // is a surface-only change; it must not wait behind another ViewRoot's draw.
                     tx.addTransactionCommittedListener(context.getMainExecutor(), () -> {
                         if (wanted && sent && liveSource && sequence == expected && controlSequence == expectedControl)
                             context.sendBroadcast(control, StatusWire.PERMISSION);
                     });
-                    BlurFillSurface.onDraw(view, tx);
+                    tx.apply();
                 }
             }
             if (sourceChanged) present(!liveSource);
@@ -196,7 +208,7 @@ final class BlurFillHost {
     boolean visible() {
         ViewGroup view = root.get();
         return wanted && ready && opacity > 0 && view != null && view.isAttachedToWindow() && view.isShown()
-                && target != null && target.isValid() && windowBlur != null && windowManager.isCrossWindowBlurEnabled();
+                && target != null && target.isValid() && material != null && windowManager.isCrossWindowBlurEnabled();
     }
     void alpha(float opacity) {
         if (this.opacity == opacity) return;
@@ -208,33 +220,36 @@ final class BlurFillHost {
     private void present() { present(false); }
     void background(Drawable background) {
         ViewGroup view = root.get(); if (view == null) return;
-        if (windowBlur != null) windowBlur.background(background);
-        else if (view.getBackground() != background) view.setBackground(background);
+        if (view.getBackground() != background) view.setBackground(background);
     }
     private void present(boolean restrict) {
         ViewGroup view = root.get();
         if (!wanted || target == null || !target.isValid() || view == null) return;
         if (!windowManager.isCrossWindowBlurEnabled()) { pauseForBlur(); changed.run(); return; }
         if (restrict) corners = false;
-        Rect materialBounds = ready && corners && liveSource ? new Rect(0, 0, viewport.width(), viewport.height()) : body;
-        windowBlur.show(materialBounds, opacity, ready && opacity > 0 && view.isShown());
+        // Native blur regions have their own bounds/crops. The fixed side region cannot invade
+        // the app; Shell hides the separate app-edge material together with the restoration plane.
         try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
-            // Locally restrict at gesture onset. Only SystemUI may expand again, after Shell idle
-            // AND the current mirror's commit; a host ACK/alpha update must never reopen the clear strip.
-            if (restrict) BlurFillSurface.clip(tx, target, plane, body);
+            // Independent parent gates: local gestures cannot be reopened by a stale remote
+            // expansion, and a stale host ACK cannot override Shell's hidden inner plane.
+            boolean extend = ready && corners && liveSource;
+            boolean showing = ready && opacity > 0 && view.isShown();
+            tx.setCrop(gate, extend ? new Rect(0, 0, viewport.width(), viewport.height()) : body)
+                    .setVisibility(gate, showing).setVisibility(appGate, showing && extend);
             tx.setAlpha(target, ready ? opacity : 0).setAlpha(plane, ready ? 1 : 0);
-            BlurFillSurface.onDraw(view, tx);
-        } catch (ReflectiveOperationException | RuntimeException error) {
+            if (extensionMaterial != null) extensionMaterial.alpha(tx, opacity);
+            tx.apply(); // Before resetLauncherForStartGesture proceeds; no pending material redraw.
+        } catch (RuntimeException error) {
             stop(); NativeModule.warning("Blur-fill region handoff unavailable; no replacement fill", error);
         }
     }
     private void requestOnDraw(ViewGroup view) throws ReflectiveOperationException {
         SurfaceControl expectedTarget = target; int expectedSequence = sequence;
         requestPending = true;
-        windowBlur.show(body, opacity, false);
         try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
-            BlurFillSurface.clip(tx, target, plane, body);
-            tx.setAlpha(plane, 0).setVisibility(plane, true);
+            BlurFillSurface.clip(tx, target, plane, body, false);
+            tx.setAlpha(plane, 0);
+            tx.setCrop(gate, body).setVisibility(gate, false).setVisibility(appGate, false);
             tx.setAlpha(expectedTarget, 0).setVisibility(expectedTarget, true).addTransactionCommittedListener(context.getMainExecutor(), () -> {
                 if (!wanted || target != expectedTarget || sequence != expectedSequence) return;
                 if (!windowManager.isCrossWindowBlurEnabled()) { pauseForBlur(); changed.run(); return; }
@@ -249,7 +264,7 @@ final class BlurFillHost {
                 Bundle binders = new Bundle(); binders.putBinder("owner", owner); request.putExtras(binders);
                 context.sendBroadcast(request, StatusWire.PERMISSION); sent = true;
             });
-            BlurFillSurface.onDraw(view, tx);
+            material.onDraw(tx);
         }
     }
     void geometrySubmitted() {
@@ -268,9 +283,9 @@ final class BlurFillHost {
     }
     private void releaseTarget() { releaseTarget(false); }
     private void releaseTarget(boolean immediate) {
-        Retired previous = target == null ? null : new Retired(target, plane, sequence, sent);
-        if (windowBlur != null) { windowBlur.close(); windowBlur = null; }
-        sent = ready = requestPending = geometryPending = corners = false; target = plane = window = null;
+        Retired previous = target == null ? null : new Retired(gate, appGate, target, plane, material, extensionMaterial, sequence, sent);
+        material = extensionMaterial = null;
+        sent = ready = requestPending = geometryPending = corners = false; gate = appGate = target = plane = window = null;
         sequence++; controlSequence = 0; lastStatus = -1;
         if (previous == null) return;
         retired.add(previous);
@@ -281,6 +296,8 @@ final class BlurFillHost {
             // source clear its mirror, so IPC timing cannot expose the task's shrinking recents transform.
             tx.setVisibility(previous.target, false).reparent(previous.target, null)
                     .setVisibility(previous.plane, false).reparent(previous.plane, null)
+                    .setVisibility(previous.appGate, false).reparent(previous.appGate, null)
+                    .setVisibility(previous.gate, false).reparent(previous.gate, null)
                     .addTransactionCommittedListener(context.getMainExecutor(), previous::finish);
             BlurFillSurface.onDraw(view, tx);
         }

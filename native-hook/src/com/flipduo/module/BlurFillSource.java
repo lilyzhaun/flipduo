@@ -41,6 +41,7 @@ final class BlurFillSource {
     private Context context;
     private volatile Request request;
     private volatile BlurFillIdle idle;
+    private BlurFillShade shade;
     private int checkedTask = -1;
     private int activeTask = -1;
     private SurfaceControl activeLeash;
@@ -55,7 +56,7 @@ final class BlurFillSource {
         IBinder.DeathRecipient death;
         int sequence, display, rotation, firstRadius, lastRadius, controlSequence;
         UserHandle user;
-        SurfaceControl target, plane; // Owned background-below-window and app-restoration-above-window handles.
+        SurfaceControl target, plane; // Owned background and app-edge gate (material plus clear restoration).
         Rect destination, viewport, side;
         boolean retained;
         private boolean surfacesReleased;
@@ -64,7 +65,7 @@ final class BlurFillSource {
         // JNI use are not atomic with release() on either verified ROM. Keep the request's
         // two owned handles alive through that JNI call, including a hook holding a stale Request.
         synchronized void restrictTransition(SurfaceControl.Transaction transaction) throws ReflectiveOperationException {
-            if (!surfacesReleased) BlurFillSurface.clip(transaction, target, plane, side);
+            if (!surfacesReleased) BlurFillSurface.clip(transaction, target, plane, side, false);
         }
         synchronized void releaseSurfaces() {
             if (surfacesReleased) return;
@@ -105,8 +106,25 @@ final class BlurFillSource {
             source.idle = null;
             NativeModule.warning("Blur-fill transition boundary unavailable; static extension stays hidden", error);
         }
+        try { source.shade = BlurFillShade.install(module, loader, source::onShadeChanged); }
+        catch (ReflectiveOperationException | RuntimeException error) {
+            NativeModule.warning("Blur-fill notification boundary unavailable; existing task handoff retained", error);
+        }
         instance = source;
-        NativeModule.info("Blur-fill v148 native-window source installed; background below window, app-only restoration above; pipeline=7");
+        NativeModule.info("Blur-fill v158 source installed; shared sampling order; pipeline=9; notificationBoundary=" + (source.shade != null));
+    }
+    private void onShadeChanged() {
+        Request current = request;
+        if (current != null && shade != null && shade.blocks(current.display)) {
+            // The source is already in SystemUI: close the same gate before the shade's first
+            // blur frame, without waiting for a broadcast or modifying the native notification.
+            try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
+                current.restrictTransition(tx); tx.apply();
+            } catch (ReflectiveOperationException | RuntimeException error) {
+                dropLayers(); report(false); NativeModule.warning("Could not restrict blur-fill for notifications", error);
+            }
+        }
+        schedule();
     }
     private void installTransitions(NativeModule module, ClassLoader loader) throws ReflectiveOperationException {
         Class<?> type = loader.loadClass("com.android.wm.shell.transition.Transitions");
@@ -321,9 +339,10 @@ final class BlurFillSource {
     }
     private void presentation(boolean corners, boolean force) throws ReflectiveOperationException {
         Request current = request;
+        if (current != null && shade != null && shade.blocks(current.display)) corners = false;
         if (current == null || !force && expanded == corners) return;
         try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
-            BlurFillSurface.clip(tx, current.target, current.plane, corners ? current.destination : current.side);
+            BlurFillSurface.clip(tx, current.target, current.plane, corners ? current.destination : current.side, corners);
             tx.apply();
         }
         expanded = corners;

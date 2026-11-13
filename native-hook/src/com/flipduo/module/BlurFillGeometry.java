@@ -23,6 +23,16 @@ final class BlurFillGeometry {
     static Rect appDestination(Rect source, Rect task, Rect viewport) {
         Rect result = new Rect(source); result.offset(task.left - viewport.left, task.top - viewport.top); return result;
     }
+    /** The native window is the side strip plus one app-edge inset, in actual logical orientation. */
+    static Rect extension(int width, int height, Rect side) {
+        Rect result = new Rect(0, 0, width, height);
+        if (side.left > 0) result.right = side.left;
+        else if (side.top > 0) result.bottom = side.top;
+        else if (side.right < width) result.left = side.right;
+        else if (side.bottom < height) result.top = side.bottom;
+        else result.setEmpty();
+        return result;
+    }
     static Rect half(Rect destination, Rect app, boolean horizontal, boolean second) {
         Rect result = new Rect(destination);
         if (horizontal) {

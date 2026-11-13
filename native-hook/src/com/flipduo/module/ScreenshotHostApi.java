@@ -66,8 +66,14 @@ final class ScreenshotHostApi {
             // Verified RELEASE-1.6.3.44: Z was reused for a Runnable; b0 owns the save data.
             // B.g converts HARDWARE input to a software copy before passing it to b0.
             Constructor<?> save = loader.loadClass("com.miui.screenshot.b0").getDeclaredConstructor(parameters);
-            Method convert = loader.loadClass("com.miui.screenshot.BitmapUtils")
-                    .getDeclaredMethod("g", Bitmap.class, boolean.class);
+            Class<?> bitmapUtils = loader.loadClass("com.miui.screenshot.BitmapUtils");
+            Method convert;
+            try { convert = bitmapUtils.getDeclaredMethod("g", Bitmap.class, boolean.class); }
+            catch (NoSuchMethodException sharedSoftwarePipeline) {
+                // Verified 1.6.3.47: g(Bitmap) owns asShared/recycle and falls back to h(Bitmap, true).
+                // Hook its returned bitmap, not only h: successful asShared never calls h.
+                convert = bitmapUtils.getDeclaredMethod("g", Bitmap.class);
+            }
             Method caller = loader.loadClass("com.miui.screenshot.B").getDeclaredMethod("g", data, Consumer.class,
                     loader.loadClass("com.miui.screenshot.TakeScreenshotService$b"));
             if (convert.getReturnType() != Bitmap.class || !Modifier.isStatic(convert.getModifiers())
