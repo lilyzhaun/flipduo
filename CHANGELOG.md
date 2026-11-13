@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.144
+
+- Fix the reported white-strip flash at the app edge when pulling down the notification shade or switching pages with live blur fill enabled.
+- Preserve asymmetric corners with continuous app-edge restoration on firmware supporting per-corner transactions, while retaining the existing compatibility path elsewhere.
+
 ## 0.6.143
 
 - Add the FlipDuo GitHub repository link to the About page.
