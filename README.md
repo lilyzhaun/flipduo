@@ -4,7 +4,7 @@
 
 FlipDuo is an LSPosed module and companion settings app for the cover screens of Xiaomi MIX Flip devices.
 
-This repository contains the production source and build files for **0.6.142 (153)**. The app's existing interface text is preserved in its original language.
+This repository contains the production source and build files for **0.6.143 (154)**. The app's existing interface text is preserved in its original language.
 
 ## Features
 
@@ -14,6 +14,7 @@ This repository contains the production source and build files for **0.6.142 (15
 - Optional full-width notifications and framed cover-screen screenshots.
 - Named local appearance presets and per-user selection of an enabled cover-screen keyboard.
 - Selectable quick restart for Screenshot, Sogou Input Method for Xiaomi, FlipHome, and System UI, using root access only after confirmation.
+- Repository access and a choice of Lanzou Cloud or the latest GitHub Release from the About page.
 
 Features depend on the device's firmware and the enabled module scopes. Fullscreen content can extend behind the physical cameras.
 
@@ -75,7 +76,7 @@ The public source distribution does not include private signing material, test s
 
 ## Source releases
 
-Use the source tag matching the APK version you received. The tag for this version is [`v0.6.142`](https://github.com/lilyzhaun/flipduo/tree/v0.6.142). The signed APK is available from the [matching release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.142); earlier source tags remain available.
+Use the source tag matching the APK version you received. The tag for this version is [`v0.6.143`](https://github.com/lilyzhaun/flipduo/tree/v0.6.143). The signed APK is available from the [matching release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.143); earlier source tags remain available.
 
 The public build configuration omits private instrumentation-test dependencies and local SDK paths. It contains the production sources needed to build this version, rather than a byte-for-byte reproduction of a publisher-signed APK.
 
