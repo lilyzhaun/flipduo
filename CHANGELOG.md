@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.143
+
+- Add the FlipDuo GitHub repository link to the About page.
+- Let users choose Lanzou Cloud or the latest GitHub Release when getting updates. The Lanzou password is shown in the channel picker; links open only after selecting a channel.
+
 ## 0.6.142
 
 Cumulative changes since 0.6.138:

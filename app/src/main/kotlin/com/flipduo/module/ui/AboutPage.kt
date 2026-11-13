@@ -11,6 +11,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -44,7 +46,9 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.blur.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -55,6 +59,7 @@ internal fun AboutPage(license: () -> Unit, back: () -> Unit) {
     val dark = isSystemInDarkTheme()
     val appearance = LocalAppearance.current
     val active = LocalRouteActive.current
+    var showDownloads by rememberSaveable { mutableStateOf(false) }
     val useBlur = appearance.blur && LocalShaderSupported.current
     val cloud = if (useBlur) rememberLayerBackdrop() else null
     val page = if (useBlur) rememberLayerBackdrop { drawRect(colors.canvas); drawContent() } else null
@@ -118,8 +123,10 @@ internal fun AboutPage(license: () -> Unit, back: () -> Unit) {
                             shape = RoundedCornerShape(16.dp), blurRadius = 60f, colors = BlurColors(blendColors = cardBlend))),
                             insideMargin = PaddingValues(0.dp), colors = CardDefaults.defaultColors(if (cloud == null) colors.surface else Color.Transparent, Color.Transparent)) {
                              BasicComponent(title = "适配设备", summary = "Xiaomi MIX Flip / MIX Flip 2")
-                             ArrowPreference(title = "获取更新", summary = "密码:26wa",
-                                 onClick = ({ context.startActivity(updateDownloadIntent()) }).takeIf { active })
+                              ArrowPreference(title = "获取更新", summary = "蓝奏云 / GitHub Release",
+                                  onClick = ({ showDownloads = true }).takeIf { active })
+                              ArrowPreference(title = "GitHub 仓库", summary = "lilyzhaun/flipduo",
+                                  onClick = ({ context.startActivity(githubRepositoryIntent()) }).takeIf { active })
                              ArrowPreference(title = "作者酷安", summary = "查看作者主页",
                                  onClick = ({ context.startActivity(authorCoolapkIntent()) }).takeIf { active })
                              ArrowPreference(title = "开源许可", summary = "项目许可与第三方致谢", onClick = license.takeIf { active })
@@ -129,12 +136,38 @@ internal fun AboutPage(license: () -> Unit, back: () -> Unit) {
             }
         }
     }
+    UpdateDownloadDialog(show = showDownloads && active, dismiss = { showDownloads = false })
+}
+
+@Composable
+private fun UpdateDownloadDialog(show: Boolean, dismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scheme = MiuixTheme.colorScheme
+    val colors = ButtonDefaults.textButtonColors(color = Color.Transparent,
+        disabledColor = Color.Transparent, textColor = scheme.primary)
+    OverlayDialog(show = show, title = "选择下载渠道", onDismissRequest = dismiss) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(text = "蓝奏云 · 密码：26wa", modifier = Modifier.fillMaxWidth(), minHeight = 48.dp,
+                colors = colors, onClick = { dismiss(); context.startActivity(updateDownloadIntent()) })
+            TextButton(text = "GitHub Release", modifier = Modifier.fillMaxWidth(), minHeight = 48.dp,
+                colors = colors, onClick = { dismiss(); context.startActivity(githubReleaseIntent()) })
+        }
+    }
 }
 
 internal fun authorCoolapkIntent() = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.coolapk.com/u/2257485"))
     .addCategory(Intent.CATEGORY_BROWSABLE)
 
 internal fun updateDownloadIntent() = Intent(Intent.ACTION_VIEW, Uri.parse("https://wwbjk.lanzouq.com/b0po0ummj"))
+    .addCategory(Intent.CATEGORY_BROWSABLE)
+
+private const val GITHUB_REPOSITORY_URL = "https://github.com/lilyzhaun/flipduo"
+
+internal fun githubRepositoryIntent() = Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPOSITORY_URL))
+    .addCategory(Intent.CATEGORY_BROWSABLE)
+
+internal fun githubReleaseIntent() = Intent(Intent.ACTION_VIEW, Uri.parse("$GITHUB_REPOSITORY_URL/releases/latest"))
     .addCategory(Intent.CATEGORY_BROWSABLE)
 
 internal fun mixFlipModIntent() = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/parallelcc/MixFlipMod"))

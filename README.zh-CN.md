@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.142（153）** 的生产源码与必要构建文件，应用现有界面文案保留。
+FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.143（154）** 的生产源码与必要构建文件，应用现有界面文案保留。
 
 ## 功能
 
@@ -12,6 +12,7 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 - 可选通知全宽与带壳外屏截图。
 - 可命名的本机外观方案，以及按Android用户选择已启用的外屏输入法。
 - 可选重启截图、搜狗输入法小米版、外屏桌面和系统界面，由用户确认后通过Root执行。
+- 关于页提供仓库入口，获取更新可选择蓝奏云或最新GitHub Release。
 
 具体功能取决于系统固件和已启用的模块作用域。全屏内容可能延伸至物理镜头遮挡区域。
 
@@ -69,7 +70,7 @@ app/build/outputs/apk/release/app-release-unsigned.apk
 
 ## 对应版本源码
 
-请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.142`](https://github.com/lilyzhaun/flipduo/tree/v0.6.142)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.142)，此前源码标签继续保留。
+请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.143`](https://github.com/lilyzhaun/flipduo/tree/v0.6.143)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.143)，此前源码标签继续保留。
 
 公开构建配置移除了私有仪器测试依赖和本机SDK路径，提供构建该版本所需的生产源码；它不承诺逐字节复现发布者签名后的APK。
 
