@@ -30,7 +30,44 @@ final class CoverAppCompatHook {
                 if (query.getReturnType() == boolean.class) return Boolean.TRUE;
                 return value;
             });
-        NativeModule.info("Cover eligibility v123 installed: four ApplicationCompatManager policy queries; integer 5/1, app/activity presence");
+        try { installInterceptionCache(module, loader); }
+        catch (ReflectiveOperationException error) {
+            NativeModule.warning("Cover eligibility cache contract unavailable; property queries remain installed", error);
+        }
+        NativeModule.info("Cover eligibility v159 installed: integer 5/1 and app/activity presence queries");
+    }
+    private void installInterceptionCache(NativeModule module, ClassLoader loader) throws ReflectiveOperationException {
+        Class<?> task = loader.loadClass("com.android.server.wm.AppCompatTask");
+        Method has = task.getDeclaredMethod("hasActivityInterceptionKey", String.class);
+        Method put = task.getDeclaredMethod("setActivityInterception", String.class, boolean.class);
+        Method read = task.getDeclaredMethod("isActivityInterception", String.class);
+        Method notify = loader.loadClass("com.android.server.wm.ContinuityPolicyService")
+                .getDeclaredMethod("notifyActivityIntercept", task, ComponentName.class);
+        Method start = null;
+        for (Method method : loader.loadClass("com.android.server.wm.InterceptActivityController").getDeclaredMethods()) {
+            if (!method.getName().equals("startActivityInnerBlockedWithSnapShot")) continue;
+            if (start != null || method.getReturnType() != boolean.class)
+                throw new NoSuchMethodException("Ambiguous startActivityInnerBlockedWithSnapShot contract");
+            start = method;
+        }
+        if (start == null) throw new NoSuchMethodException("startActivityInnerBlockedWithSnapShot");
+        // These tiny cache accessors can be inlined in the verified ROM callers.
+        // Resolve/deoptimize all callers before installing either half of the cache policy.
+        for (Method caller : new Method[]{start, read, notify})
+            if (!module.deoptimize(caller)) throw new ReflectiveOperationException("Cannot deoptimize " + caller.getName());
+        // startActivityInnerBlockedWithSnapShot consults this process-wide cache BEFORE
+        // the four property queries. Force a fresh decision while enabled, including
+        // pre-existing system-app entries, without clearing the OEM's original map.
+        module.hook(has).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+            if (enabled) return Boolean.FALSE;
+            return chain.proceed();
+        });
+        // Temporary allow results must not survive disabling the feature.
+        module.hook(put).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+            if (enabled) return null;
+            return chain.proceed();
+        });
+        NativeModule.info("Cover eligibility: interception cache bypass and temporary-write suppression installed");
     }
     private void readEnabled() { enabled = preferences.getBoolean("enabled", true) && preferences.getBoolean("unrestrict_cover_apps", false); }
     static Method[] methods(Class<?> type) throws NoSuchMethodException {

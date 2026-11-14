@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.147（158）** 的生产源码与必要构建文件，应用现有界面文案保留。
+FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.150（161）** 的生产源码与必要构建文件，应用现有界面文案保留。
 
 ## 功能
 
@@ -10,6 +10,7 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 - 支持应用旁侧的纯黑或实时模糊背景。
 - 按应用设置全屏，以及自定义外屏最近任务。
 - 可选通知全宽与带壳外屏截图。
+- 外屏控制中心原生长按操作，以及紧凑、避让镜头的详情面板。
 - 可命名的本机外观方案，以及按Android用户选择已启用的外屏输入法。
 - 可选重启截图、搜狗输入法小米版、外屏桌面和系统界面，由用户确认后通过Root执行。
 - 关于页提供仓库入口，获取更新可选择蓝奏云或最新GitHub Release。
@@ -20,7 +21,9 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 
 目标环境为初代 MIX Flip（`ruyi`）HyperOS 3，以及 MIX Flip 2（`bixi`）HyperOS 3／4。固件相关行为需要在对应设备上验证，兼容目标不代表每项功能已在所有固件上通过验收。
 
-本版本已获MIX Flip 2／HyperOS 4用户验收；初代HyperOS 3以ROM接口核对为依据，MIX Flip 2／HyperOS 3仍待独立固件及实机验证。实时模糊仍属试验功能，表现可能随视频内容和固件变化。
+本版本控制中心改动已获MIX Flip 2／HyperOS 4用户验收；初代HyperOS 3以ROM接口核对为依据，MIX Flip 2／HyperOS 3仍待独立固件及实机验证。实时模糊仍属试验功能，表现可能随视频内容和固件变化。
+
+长按详情沿用原生操作和滚动，按显示器挖孔安全区紧凑排布，返回后恢复主面板透明度；需重载SystemUI加载这些改动。“解除外屏应用限制”开启时会重新判断已有拦截缓存，相关修正已核对ROM及逻辑，其他固件上的受影响应用仍待实机验证。该系统框架策略需要用户手动重启手机后加载。
 
 实时模糊在页面切换和最近任务手势期间保留稳定侧区，统一圆角填充与侧区的取样层序，并与通知动画协调应用边缘还原。系统支持四角图层事务时，连续还原可保留不同圆角半径；缺少该接口的固件保留旧还原路径，该回退路径尚未独立验证修正效果。更新后请重载FlipHome和SystemUI，使两宿主加载对应版本。
 
@@ -74,7 +77,13 @@ app/build/outputs/apk/release/app-release-unsigned.apk
 
 ## 对应版本源码
 
-请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.147`](https://github.com/lilyzhaun/flipduo/tree/v0.6.147)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.147)，此前源码标签继续保留。
+请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.150`](https://github.com/lilyzhaun/flipduo/tree/v0.6.150)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.150)，此前源码标签继续保留。
+
+升级时使用覆盖安装以保留应用设置。通过ADB安装时，明确使用非增量方式：
+
+```sh
+adb install --no-incremental -r flipduo-0.6.150.apk
+```
 
 公开构建配置移除了私有仪器测试依赖和本机SDK路径，提供构建该版本所需的生产源码；它不承诺逐字节复现发布者签名后的APK。
 
