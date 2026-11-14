@@ -38,6 +38,12 @@ final class ControlCenterLandscape {
             Object plugin = chain.getArg(0);
             try { installPlugin(module, plugin.getClass().getClassLoader()); }
             catch (ReflectiveOperationException error) { NativeLog.warning("Cover control-center plugin contract unavailable; native layout retained", error); }
+            try { CoverControlCenterLongPress.install(module, plugin.getClass().getClassLoader()); }
+            catch (ReflectiveOperationException error) { NativeLog.warning("Cover control-center long-press contract unavailable; native listener retained", error); }
+            try { CoverControlCenterDetail.install(module, plugin.getClass().getClassLoader()); }
+            catch (ReflectiveOperationException error) { NativeLog.warning("Cover control-center detail contract unavailable; native detail layout retained", error); }
+            try { CoverControlCenterReturn.install(module, plugin.getClass().getClassLoader()); }
+            catch (ReflectiveOperationException error) { NativeLog.warning("Cover control-center return contract unavailable; native transition retained", error); }
             Object result = chain.proceed();
             try {
                 Object panel = plugin.getClass().getMethod("getMainPanelController").invoke(plugin);
@@ -154,6 +160,7 @@ final class ControlCenterLandscape {
         return Math.max(Math.round(20 * density), measuredRow) + 2 * Math.round(4 * density);
     }
     static void refresh() {
+        CoverControlCenterDetail.refresh();
         for (var entry : new java.util.ArrayList<>(panels.entrySet())) {
             try { entry.getValue().invoke(entry.getKey()); }
             catch (ReflectiveOperationException error) { NativeLog.warning("Cover control-center preference reflow failed", error); }

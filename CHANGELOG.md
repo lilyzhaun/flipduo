@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.150
+
+Cumulative changes since 0.6.147:
+
+- Restore native long-press actions for cover-screen control-center buttons.
+- Make native detail panels more compact and keep their content outside the camera cutout, while preserving scrolling and usable touch targets.
+- Restore the control center's normal opacity and scale after returning from a long-press detail panel.
+- Prevent stale app-interception decisions from overriding the cover-app eligibility switch, including previously blocked system apps. Temporary allow decisions no longer persist in this cache after disabling the option.
+
+The control-center changes are user-accepted on MIX Flip 2 / HyperOS 4. The eligibility-cache correction has ROM and logic verification; affected apps on other target firmware still require device verification. Reload System UI for the control-center changes. The eligibility correction also requires the updated system-framework hooks, which load after a manual device restart.
+
 ## 0.6.147
 
 Cumulative fixes since 0.6.144:
