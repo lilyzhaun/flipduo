@@ -46,8 +46,9 @@ final class NativeDock extends ViewGroup {
             applyEventState(EventIslandState.decode(intent));
         }
     };
-    private final SimpleDateFormat clock = new SimpleDateFormat("HH:mm", Locale.CHINA);
-    private final SimpleDateFormat day = new SimpleDateFormat("EEE", Locale.CHINA);
+    private final SimpleDateFormat clock = new SimpleDateFormat(ClockLines.TOP, Locale.CHINA);
+    private final SimpleDateFormat day = new SimpleDateFormat(ClockLines.BOTTOM, Locale.CHINA);
+    private boolean clockSeconds;
     // Minute clock and degraded status reads are separate one-shot drivers; neither runs while hidden or screen-off.
     private final MinuteClock minuteClock = new MinuteClock(new MinuteClock.Host() {
         @Override public long now() { return System.currentTimeMillis(); }
@@ -151,9 +152,8 @@ final class NativeDock extends ViewGroup {
             openWidgets.run();
         });
         header = new Header(context); addView(header);
-        header.setClickable(!preview); header.setFocusable(!preview);
-        if (!preview) header.setOnClickListener(v -> openSettings());
-        if (!preview) header.setOnLongClickListener(new OnLongClickListener() {
+        header.setFocusable(!preview);
+        if (!preview) header.longPress(new OnLongClickListener() {
             @Override public boolean onLongClick(View v) {
                 if (!enabled || slotOwned()) return false;
                 buttonVisibility.toggle(); buttonsChanged(); header.updateDescription();
@@ -232,7 +232,7 @@ final class NativeDock extends ViewGroup {
     private void applySlotOwner() {
         boolean owned = !slot().dockShown; setAlpha(owned ? 0 : 1);
         setImportantForAccessibility(owned ? IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS : IMPORTANT_FOR_ACCESSIBILITY_AUTO);
-        applyMenuMotion(); invalidate();
+        applyMenuMotion(); invalidate(); updateTimers();
     }
     /** Long-pressed recents. The widget panel and a mini window share one slot, so the panel yields first. */
     boolean requestMiniWindow() {
@@ -305,7 +305,15 @@ final class NativeDock extends ViewGroup {
         int delta = DockConfigDelta.between(configApplied ? config : null, value);
         configApplied = true;
         boolean hidden = buttonsHidden();
+        boolean headerChanges = delta != 0 && (config.showClock != value.showClock || config.showTrio != value.showTrio
+                || config.trioTap != value.trioTap || config.clockTap != value.clockTap);
+        boolean formatChanged = !config.clockTop.equals(value.clockTop) || !config.clockBottom.equals(value.clockBottom);
+        if (formatChanged) {
+            clock.applyPattern(value.clockTop); day.applyPattern(value.clockBottom);
+            clockSeconds = ClockLines.seconds(value.clockTop) || ClockLines.seconds(value.clockBottom);
+        }
         config = value;
+        if (headerChanges || formatChanged) header.updateDescription();
         buttonVisibility.configure(value.enabled, value.hideFullscreenButtons);
         boolean hiddenChanged = hidden != buttonsHidden();
         if (hiddenChanged) buttonsChanged();
@@ -801,7 +809,7 @@ final class NativeDock extends ViewGroup {
         if (minuteClock == null || statusFallback == null) return; // a framework callback during super construction
         boolean live = attached && enabled && !previewOnly && screenOn && isShown() && getWindowVisibility() == VISIBLE;
         // Accessibility text includes the time, so it is kept current even when the clock is not drawn.
-        minuteClock.update(live && (config.showClock || accessibilityOn()));
+        minuteClock.update(live && !slotOwned() && (config.showClock || accessibilityOn()), config.showClock && clockSeconds);
         statusFallback.update(live && !receivedSystemState);
     }
 
@@ -961,19 +969,69 @@ final class NativeDock extends ViewGroup {
             island.addTouchableRegion(region, getLeft(), getTop());
     }
 
-    private final class Header extends View {
+    private final class Header extends android.widget.FrameLayout {
         private final TrioPainter trio = new TrioPainter();
         private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final View trioTarget, clockTarget;
+        private final Rect trioBounds = new Rect(), clockBounds = new Rect();
         Header(Context context) {
-            super(context); setImportantForAccessibility(previewOnly ? IMPORTANT_FOR_ACCESSIBILITY_NO : IMPORTANT_FOR_ACCESSIBILITY_YES);
+            super(context); setWillNotDraw(false); setImportantForAccessibility(previewOnly ? IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS : IMPORTANT_FOR_ACCESSIBILITY_YES);
+            trioTarget = target(true); clockTarget = target(false);
             text.setTextAlign(Paint.Align.CENTER); text.setTypeface(Typeface.create(Typeface.SANS_SERIF, 600, false));
             text.setFontFeatureSettings("tnum");
         }
+        private View target(boolean isTrio) {
+            View view = new View(getContext()); addView(view);
+            if (!previewOnly) {
+                view.setFocusable(true);
+                view.setOnClickListener(v -> {
+                    if (!enabled || slotOwned() || !(isTrio ? config.showTrio : config.showClock)) return;
+                    HeaderTapAction action = isTrio ? config.trioTap : config.clockTap;
+                    Display display = getDisplay(); Intent intent = action.intent();
+                    if (intent == null || display == null || display.getState() != Display.STATE_ON) return;
+                    try {
+                        ActivityOptions opts = ActivityOptions.makeBasic(); opts.setLaunchDisplayId(display.getDisplayId());
+                        getContext().startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), opts.toBundle());
+                    } catch (ActivityNotFoundException | SecurityException unavailable) {
+                        Toast.makeText(getContext(), "无法打开" + action.title + "，可在控制区动作中更换", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+            return view;
+        }
+        void longPress(OnLongClickListener listener) {
+            setOnLongClickListener(listener); trioTarget.setOnLongClickListener(listener); clockTarget.setOnLongClickListener(listener);
+        }
         void updateDescription() {
-            setContentDescription("时间 " + clock.format(new Date()) + "，" + day.format(new Date()) + "，"
-                    + (state.battery < 0 ? "电量未知" : "电量 " + state.battery + "%") + "，"
-                    + (state.showWifi() ? "Wi-Fi" : state.centre()) + "，点按打开外屏设置，长按临时"
-                    + (buttonsHidden() ? "显示" : "隐藏") + "所有按钮");
+            Date now = new Date();
+            String time = clock.format(now) + "，" + day.format(now);
+            String status = (state.battery < 0 ? "电量未知" : "电量 " + state.battery + "%") + "，" + (state.showWifi() ? "Wi-Fi" : state.centre());
+            setContentDescription(time + "，" + status + "，长按临时" + (buttonsHidden() ? "显示" : "隐藏") + "所有按钮");
+            trioTarget.setVisibility(config.showTrio ? VISIBLE : GONE); clockTarget.setVisibility(config.showClock ? VISIBLE : GONE);
+            trioTarget.setClickable(!previewOnly && config.trioTap != HeaderTapAction.NONE);
+            clockTarget.setClickable(!previewOnly && config.clockTap != HeaderTapAction.NONE);
+            trioTarget.setContentDescription("三合一，" + status + "，" + config.trioTap.title);
+            clockTarget.setContentDescription("时钟，" + time + "，" + config.clockTap.title);
+        }
+        @Override protected void onMeasure(int ws, int hs) {
+            int w = MeasureSpec.getSize(ws), h = MeasureSpec.getSize(hs);
+            float sx, sy, dx, dy;
+            if (landscape) {
+                sx = sy = landscapeHeaderScale(w, h); dx = (w - 156 * sx)/2; dy = (h - 398 * sy)/2;
+                trioBounds.set(0, 26, 156, 182); clockBounds.set(0, 182, 156, 308);
+            } else {
+                int offset = DockSpec.edgeOffset(config.offsetY, bottomControls);
+                sx = w / (float)DockSpec.WIDTH; sy = h / (float)(DockSpec.HEADER + offset); dx = 0; dy = offset * sy;
+                trioBounds.set(34, 0, 186, 156); clockBounds.set(186, 0, 354, 156);
+            }
+            for (Rect r : new Rect[]{trioBounds, clockBounds}) r.set(Math.round(r.left*sx+dx), Math.round(r.top*sy+dy),
+                    Math.round(r.right*sx+dx), Math.round(r.bottom*sy+dy));
+            measureExact(trioTarget, trioBounds.width(), trioBounds.height()); measureExact(clockTarget, clockBounds.width(), clockBounds.height());
+            setMeasuredDimension(w, h);
+        }
+        @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            trioTarget.layout(trioBounds.left, trioBounds.top, trioBounds.right, trioBounds.bottom);
+            clockTarget.layout(clockBounds.left, clockBounds.top, clockBounds.right, clockBounds.bottom);
         }
         @Override protected void onDraw(Canvas c) {
             if (landscape) { drawLandscape(c); return; }

@@ -4,11 +4,13 @@
 
 FlipDuo is an LSPosed module and companion settings app for the cover screens of Xiaomi MIX Flip devices.
 
-This repository contains the production source and build files for **0.6.150 (161)**. The app's existing interface text is preserved in its original language.
+This repository contains the production source and build files for **0.7.4 (172)**. The app's existing interface text is preserved in its original language.
 
 ## Features
 
 - Configurable cover-screen navigation controls, status indicators, and notification/activity displays.
+- Three- or four-column stock cover app list, local app search beside Edit, and optional double-tap on blank space to lock.
+- Configurable tap actions for the status indicator and clock, and independent formats for both clock lines.
 - Black or live blurred backgrounds beside supported apps.
 - Per-app fullscreen options and cover-screen recent-task customization.
 - Optional full-width notifications and framed cover-screen screenshots.
@@ -23,7 +25,7 @@ Features depend on the device's firmware and the enabled module scopes. Fullscre
 
 The compatibility targets are MIX Flip (`ruyi`) on HyperOS 3 and MIX Flip 2 (`bixi`) on HyperOS 3 or 4. Firmware-specific behavior requires verification on the corresponding device; these targets are not a guarantee that every feature works on every firmware.
 
-The control-center changes in this version have user acceptance on MIX Flip 2 / HyperOS 4. First-generation HyperOS 3 support is based on ROM interface checks, and MIX Flip 2 / HyperOS 3 still requires independent firmware and device verification. Live blur remains experimental and can vary by video content and firmware.
+The 0.7.4 Search and Edit button appearance has user acceptance. For the new launcher integration, first-generation HyperOS 3 checks use ROM interfaces rather than device tests; MIX Flip 2 / HyperOS 3 still requires independent firmware and device verification. Live blur remains experimental and can vary by video content and firmware.
 
 Cover detail panels keep their native actions and scrolling, use the display's camera-safe area, and restore the main panel's opacity after returning. Reload System UI to load these changes. The cover-app eligibility switch now bypasses stale interception-cache entries while enabled; this correction has ROM and logic verification, with affected apps on other firmware still awaiting device verification. Its system-framework hooks load after a manual device restart.
 
@@ -83,12 +85,12 @@ The public source distribution does not include private signing material, test s
 
 ## Source releases
 
-Use the source tag matching the APK version you received. The tag for this version is [`v0.6.150`](https://github.com/lilyzhaun/flipduo/tree/v0.6.150). The signed APK is available from the [matching release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.150); earlier source tags remain available.
+Use the source tag matching the APK version you received. The tag for this version is [`v0.7.4`](https://github.com/lilyzhaun/flipduo/tree/v0.7.4). The signed APK is available from the [matching release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.7.4); earlier source tags remain available.
 
 Update in place to retain app settings. For ADB installation, explicitly use the non-incremental path:
 
 ```sh
-adb install --no-incremental -r flipduo-0.6.150.apk
+adb install --no-incremental -r flipduo-0.7.4.apk
 ```
 
 The public build configuration omits private instrumentation-test dependencies and local SDK paths. It contains the production sources needed to build this version, rather than a byte-for-byte reproduction of a publisher-signed APK.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.4
+
+Changes since 0.6.150:
+
+- Choose three or four columns in FlipHome's native cover app list. Scrolling, editing and drag-to-reorder remain available.
+- Search installed, launchable apps by name or package and open a result on the cover screen. The optional Search button matches the stock Edit button's size and rounded ends. Searches stay on the device and have no history.
+- Optionally double-tap a blank part of the cover app list to lock the screen (off by default).
+- Choose separate tap actions for the status indicator and the clock under Control Area Actions. They open Wi-Fi settings and Clock by default; Calendar is also available. Existing navigation long-press settings are retained.
+- Customize the clock's two lines independently, with a format preview and optional seconds.
+
 ## 0.6.150
 
 Cumulative changes since 0.6.147:

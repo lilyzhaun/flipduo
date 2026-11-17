@@ -53,6 +53,13 @@ public final class DockConfig {
     /** F04 option: while focused, hide the island's notification number (entry stays usable). */
     public boolean visualFocusHideCount = false;
     public RecentsStyle recentsStyle = RecentsStyle.SYSTEM;
+    public int desktopColumns = 3;
+    public boolean showDesktopSearch = true;
+    public boolean desktopDoubleTapLock = false;
+    public String clockTop = ClockLines.TOP, clockBottom = ClockLines.BOTTOM;
+    public HeaderTapAction trioTap = HeaderTapAction.WIFI, clockTap = HeaderTapAction.CLOCK;
+
+    boolean desktopSearchEnabled() { return enabled && showDesktopSearch; }
 
     boolean hidesCoverCameraShortcut() { return enabled && hideCoverCamera; }
 
@@ -89,6 +96,13 @@ public final class DockConfig {
         c.visualFocus = prefs.getBoolean("visual_focus", false);
         c.visualFocusHideCount = prefs.getBoolean("visual_focus_hide_count", false);
         c.recentsStyle = RecentsStyle.read(prefs.getString("recents_style", null));
+        c.desktopColumns = NativeDesktopColumns.read(prefs);
+        c.showDesktopSearch = prefs.getBoolean("show_desktop_search", c.showDesktopSearch);
+        c.desktopDoubleTapLock = prefs.getBoolean("desktop_double_tap_lock", false);
+        c.clockTop = ClockLines.read(prefs.getString("clock_top_format", null), ClockLines.TOP);
+        c.clockBottom = ClockLines.read(prefs.getString("clock_bottom_format", null), ClockLines.BOTTOM);
+        c.trioTap = HeaderTapAction.read(prefs.getString("tap_trio", null), c.trioTap);
+        c.clockTap = HeaderTapAction.read(prefs.getString("tap_clock", null), c.clockTap);
         c.offsetY = bound(prefs.getInt("offset_y", 12), 0, 14); c.scale = bound(prefs.getInt("scale", 96), 80, 100);
         c.iconScale = bound(prefs.getInt("icon_scale", 100), 70, 130); c.statusScale = bound(prefs.getInt("status_scale", 100), 80, 120);
         c.trioStroke = bound(prefs.getInt("trio_stroke", 100), 60, 140);

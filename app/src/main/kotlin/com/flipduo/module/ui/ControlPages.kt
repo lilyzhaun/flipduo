@@ -414,6 +414,7 @@ private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsSt
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
             SwitchPreference(title = "显示时钟", checked = c.showClock, onCheckedChange = { store.update { old -> old.copy(showClock = it) } })
         } }
+        item { ClockLineEditor(c.clockTop, c.clockBottom) { top, bottom -> store.update { it.copy(clockTop = top, clockBottom = bottom) } } }
         }
         LayoutPanel.TRIO -> {
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
@@ -623,7 +624,37 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
                 { store.update { old -> old.copy(statusBarHeight = it) } }, summary = "降低顶部留白，保留下拉手势。")
         } }
         }
+        SettingsPanel.DESKTOP -> {
+        item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
+            OverlayDropdownPreference(title = "桌面列数", items = listOf("3 列（原生）", "4 列"),
+                selectedIndex = if (c.desktopColumns == 3) 0 else 1,
+                onSelectedIndexChange = { index -> store.update { it.copy(desktopColumns = if (index == 0) 3 else 4) } })
+            SwitchPreference(title = "显示搜索按钮", summary = "在桌面底部的“编辑”旁显示“搜索”", checked = c.showDesktopSearch,
+                onCheckedChange = { value -> store.update { it.copy(showDesktopSearch = value) } })
+            SwitchPreference(title = "双击空白处锁屏", summary = "在桌面应用列表的空白处连续轻点两下", checked = c.desktopDoubleTapLock,
+                onCheckedChange = { value -> store.update { it.copy(desktopDoubleTapLock = value) } })
+        } }
+        item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(20.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("原生桌面", fontSize = 16.sp, color = uiColors().text)
+                Text("上下滚动、长按拖动排序和编辑应用均使用系统原有操作。",
+                    fontSize = 13.sp, lineHeight = 20.sp, color = uiColors().secondary)
+                Text("默认3列；选择4列时图标相应缩小。应用顺序沿用原生桌面，不限制总行数。更新后需让外屏桌面重新加载新版。",
+                    fontSize = 13.sp, lineHeight = 20.sp, color = uiColors().secondary)
+            }
+        } }
+        }
         SettingsPanel.NAVIGATION -> {
+        item { SmallTitle("点按") }
+        item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
+            val actions = com.flipduo.module.HeaderTapAction.entries
+            val labels = actions.map { it.title }
+            OverlayDropdownPreference(title = "三合一图标", items = labels, selectedIndex = actions.indexOf(c.trioTap),
+                onSelectedIndexChange = { i -> store.update { it.copy(trioTap = actions[i]) } })
+            OverlayDropdownPreference(title = "时钟", items = labels, selectedIndex = actions.indexOf(c.clockTap),
+                onSelectedIndexChange = { i -> store.update { it.copy(clockTap = actions[i]) } })
+        } }
+        item { SmallTitle("导航键长按") }
         item { NavigationLongPressPreferences(c, chooseLongPressApp) { change -> store.update(change) } }
         }
         SettingsPanel.FEEDBACK -> {
