@@ -8,8 +8,8 @@ package com.flipduo.module.ui
  */
 internal enum class SettingsGroup(val title: String) {
     CONTROLS("控件布局"), CAMERA("镜头圆环"), STATUS("时钟显示"), TRIO("三合一"), CORNERS("应用侧圆角"),
-    BEHAVIOR("外屏行为"), NAVIGATION("导航键长按"), FEEDBACK("触感与动画"), SCREENSHOTS("外屏截图"),
-    COMPATIBILITY("兼容设置"), FULLSCREEN("应用全屏"), INPUT_METHOD("外屏输入法");
+    BEHAVIOR("外屏行为"), NAVIGATION("控制区动作"), FEEDBACK("触感与动画"), SCREENSHOTS("外屏截图"),
+    COMPATIBILITY("兼容设置"), FULLSCREEN("应用全屏"), INPUT_METHOD("外屏输入法"), DESKTOP("外屏桌面");
 
     /** This group's business values, compared to detect which groups a commit touched. */
     fun values(c: Controls): List<Any?> = when (this) {
@@ -18,19 +18,20 @@ internal enum class SettingsGroup(val title: String) {
             c.cameraDebugRings, c.cameraMainX, c.cameraMainY, c.cameraLowerX, c.cameraLowerY, c.cameraMainRadius,
             c.cameraLowerRadius, c.cameraMainStroke, c.cameraLowerStroke, c.cameraTimerColor, c.cameraProgressColor,
             c.cameraChargeColor, c.cameraTimerBreathColor, c.cameraNotificationColor, c.cameraChargeTarget, c.cameraChargeTargetPercent, c.visualFocus, c.visualFocusHideCount, c.cameraChargeArrival)
-        STATUS -> listOf(c.showClock)
+        STATUS -> listOf(c.showClock, c.clockTop, c.clockBottom)
         TRIO -> listOf(c.showTrio, c.statusScale, c.trioStroke, c.trioWifiScale, c.trioWifiStroke, c.trioNetworkScale,
             c.trioNetworkWeight, c.trioBatteryNumber, c.trioBatteryScale, c.trioBatteryWeight)
         CORNERS -> listOf(c.systemCorners, c.symmetricCorners)
         BEHAVIOR -> listOf(c.background, c.recentsCrop, c.recentsStyle, c.recentsCardLongPress, c.eventIsland, c.islandLock,
             c.landscapeCompat, c.hideStatus, c.hideCoverCamera, c.statusBarHeight, c.notificationFullscreen, c.hideCoverBottomGuard)
         NAVIGATION -> listOf(c.backLongPress, c.homeLongPress, c.recentsLongPress, c.backLongPressApp, c.homeLongPressApp,
-            c.recentsLongPressApp)
+            c.recentsLongPressApp, c.trioTap, c.clockTap)
         FEEDBACK -> listOf(c.haptics, c.animations, c.animationMs)
         SCREENSHOTS -> listOf(c.framedScreenshots)
         COMPATIBILITY -> listOf(c.unrestrictCoverApps, c.innerRecentsCompat)
         FULLSCREEN -> listOf(c.fullscreenApps, c.fullscreenScales, c.hideFullscreenButtons, c.trueFullscreenApps)
         INPUT_METHOD -> listOf(c.coverInputMethod, c.coverInputMethodUser)
+        DESKTOP -> listOf(c.desktopColumns, c.showDesktopSearch, c.desktopDoubleTapLock)
     }
 
     /** [target] with only this group's fields taken from [from]; revision and every other group stay as in [target]. */
@@ -47,7 +48,7 @@ internal enum class SettingsGroup(val title: String) {
             cameraNotificationColor = from.cameraNotificationColor, cameraChargeTarget = from.cameraChargeTarget,
             cameraChargeTargetPercent = from.cameraChargeTargetPercent, visualFocus = from.visualFocus,
             visualFocusHideCount = from.visualFocusHideCount, cameraChargeArrival = from.cameraChargeArrival)
-        STATUS -> target.copy(showClock = from.showClock)
+        STATUS -> target.copy(showClock = from.showClock, clockTop = from.clockTop, clockBottom = from.clockBottom)
         TRIO -> target.copy(showTrio = from.showTrio, statusScale = from.statusScale, trioStroke = from.trioStroke,
             trioWifiScale = from.trioWifiScale, trioWifiStroke = from.trioWifiStroke, trioNetworkScale = from.trioNetworkScale,
             trioNetworkWeight = from.trioNetworkWeight, trioBatteryNumber = from.trioBatteryNumber,
@@ -60,7 +61,8 @@ internal enum class SettingsGroup(val title: String) {
             hideCoverBottomGuard = from.hideCoverBottomGuard)
         NAVIGATION -> target.copy(backLongPress = from.backLongPress, homeLongPress = from.homeLongPress,
             recentsLongPress = from.recentsLongPress, backLongPressApp = from.backLongPressApp,
-            homeLongPressApp = from.homeLongPressApp, recentsLongPressApp = from.recentsLongPressApp)
+            homeLongPressApp = from.homeLongPressApp, recentsLongPressApp = from.recentsLongPressApp,
+            trioTap = from.trioTap, clockTap = from.clockTap)
         FEEDBACK -> target.copy(haptics = from.haptics, animations = from.animations, animationMs = from.animationMs)
         SCREENSHOTS -> target.copy(framedScreenshots = from.framedScreenshots)
         COMPATIBILITY -> target.copy(unrestrictCoverApps = from.unrestrictCoverApps, innerRecentsCompat = from.innerRecentsCompat)
@@ -68,6 +70,7 @@ internal enum class SettingsGroup(val title: String) {
             trueFullscreenApps = from.trueFullscreenApps,
             hideFullscreenButtons = from.hideFullscreenButtons)
         INPUT_METHOD -> target.copy(coverInputMethod = from.coverInputMethod, coverInputMethodUser = from.coverInputMethodUser)
+        DESKTOP -> target.copy(desktopColumns = from.desktopColumns, showDesktopSearch = from.showDesktopSearch, desktopDoubleTapLock = from.desktopDoubleTapLock)
     }
 
     companion object {

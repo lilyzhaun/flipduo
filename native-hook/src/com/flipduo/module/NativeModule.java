@@ -93,7 +93,7 @@ public final class NativeModule extends XposedModule {
                 preferences = getRemotePreferences(DockConfig.GROUP); currentConfig = DockConfig.read(preferences);
                 applyPreferences = () -> {
                     currentConfig = DockConfig.read(preferences);
-                    if ("com.miui.fliphome".equals(param.getPackageName())) CoverRecents.refresh();
+                    if ("com.miui.fliphome".equals(param.getPackageName())) { CoverRecents.refresh(); NativeDesktopColumnsHook.refreshAll(); StockAppSearchHook.refreshAll(); }
                     if (SogouImeCutout.PACKAGE.equals(param.getPackageName())) SogouImeCutout.refresh();
                     else if ("com.android.systemui".equals(param.getPackageName())) { CoverStatusPolicy.refresh(); CoverCameraShortcutPolicy.refresh(); BlurFillSource.refresh(); FocusEventBridge.refresh(); ControlCenterLandscape.refresh(); reportSystemUiFallback(); }
                     else for (ViewGroup root : new ArrayList<>(sessions.keySet())) {
@@ -174,6 +174,12 @@ public final class NativeModule extends XposedModule {
         }
         if (!param.isFirstPackage() || !"com.miui.fliphome".equals(param.getPackageName())) return;
         CoverRecents.install(this, param.getClassLoader());
+        try { new NativeDesktopColumnsHook(this, param.getClassLoader()); }
+        catch (ReflectiveOperationException | RuntimeException error) { warning("Native desktop column adjustment unavailable; stock layout retained", error); }
+        try { new StockAppSearchHook(this, param.getClassLoader()); }
+        catch (ReflectiveOperationException | RuntimeException error) { warning("Stock desktop app search unavailable; original edit row retained", error); }
+        try { new DesktopBlankLock(this, param.getClassLoader()); }
+        catch (ReflectiveOperationException | RuntimeException error) { warning("Desktop blank double tap unavailable", error); }
         try {
             ClassLoader cl = param.getClassLoader();
             // FlipHome already holds INTERNAL_SYSTEM_WINDOW. The transparent rounding bleed must not make

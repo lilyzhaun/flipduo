@@ -37,8 +37,8 @@ final class DockConfigDelta {
         CATEGORY.put("scale", LAYOUT | REDRAW);
         CATEGORY.put("eventIsland", FULL);
         for (String name : new String[]{"order", "backLongPress", "homeLongPress", "recentsLongPress",
-                "backLongPressApp", "homeLongPressApp", "recentsLongPressApp"}) CATEGORY.put(name, ACTIONS);
-        for (String name : new String[]{"iconScale", "statusScale", "showClock", "showTrio", "trioStroke", "trioWifiScale",
+                "backLongPressApp", "homeLongPressApp", "recentsLongPressApp", "trioTap", "clockTap"}) CATEGORY.put(name, ACTIONS);
+        for (String name : new String[]{"clockTop", "clockBottom", "iconScale", "statusScale", "showClock", "showTrio", "trioStroke", "trioWifiScale",
                 "trioWifiStroke", "trioNetworkScale", "trioNetworkWeight", "trioBatteryNumber", "trioBatteryScale",
                 "trioBatteryWeight", "visualFocus", "visualFocusHideCount"}) CATEGORY.put(name, REDRAW);
         // Not read by NativeDock, or only by steps applyConfig() still runs every time
@@ -50,7 +50,7 @@ final class DockConfigDelta {
                 "cameraBreathing", "cameraDebugRings", "cameraMainStroke", "cameraLowerStroke", "cameraMainX", "cameraMainY",
                 "cameraLowerX", "cameraLowerY", "cameraMainRadius", "cameraLowerRadius", "cameraTimerColor",
                 "cameraProgressColor", "cameraChargeColor", "cameraTimerBreathColor", "cameraNotificationColor",
-                "cameraChargeTarget", "cameraChargeTargetPercent", "cameraChargeArrival"}) CATEGORY.put(name, 0);
+                "cameraChargeTarget", "cameraChargeTargetPercent", "cameraChargeArrival", "desktopColumns", "showDesktopSearch", "desktopDoubleTapLock"}) CATEGORY.put(name, 0);
     }
 
     private DockConfigDelta() {}

@@ -2,11 +2,13 @@
 
 [English](README.md)
 
-FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.6.150（161）** 的生产源码与必要构建文件，应用现有界面文案保留。
+FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.7.4（172）** 的生产源码与必要构建文件，应用现有界面文案保留。
 
 ## 功能
 
 - 自定义外屏导航控件、状态指示及通知／活动显示。
+- 外屏原生应用列表可选三列或四列，在“编辑”旁搜索本机应用，并可开启双击空白处锁屏。
+- 三合一与时钟的点按动作可分别设置，双行时钟支持自定义格式和预览。
 - 支持应用旁侧的纯黑或实时模糊背景。
 - 按应用设置全屏，以及自定义外屏最近任务。
 - 可选通知全宽与带壳外屏截图。
@@ -21,7 +23,7 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 
 目标环境为初代 MIX Flip（`ruyi`）HyperOS 3，以及 MIX Flip 2（`bixi`）HyperOS 3／4。固件相关行为需要在对应设备上验证，兼容目标不代表每项功能已在所有固件上通过验收。
 
-本版本控制中心改动已获MIX Flip 2／HyperOS 4用户验收；初代HyperOS 3以ROM接口核对为依据，MIX Flip 2／HyperOS 3仍待独立固件及实机验证。实时模糊仍属试验功能，表现可能随视频内容和固件变化。
+0.7.4 的“搜索”和“编辑”按钮外观已获用户验收。外屏桌面接入在初代 HyperOS 3 上以 ROM 接口核对为依据，MIX Flip 2／HyperOS 3 仍待独立固件及实机验证。实时模糊仍属试验功能，表现可能随视频内容和固件变化。
 
 长按详情沿用原生操作和滚动，按显示器挖孔安全区紧凑排布，返回后恢复主面板透明度；需重载SystemUI加载这些改动。“解除外屏应用限制”开启时会重新判断已有拦截缓存，相关修正已核对ROM及逻辑，其他固件上的受影响应用仍待实机验证。该系统框架策略需要用户手动重启手机后加载。
 
@@ -77,12 +79,12 @@ app/build/outputs/apk/release/app-release-unsigned.apk
 
 ## 对应版本源码
 
-请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.6.150`](https://github.com/lilyzhaun/flipduo/tree/v0.6.150)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.6.150)，此前源码标签继续保留。
+请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.7.4`](https://github.com/lilyzhaun/flipduo/tree/v0.7.4)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.7.4)，此前源码标签继续保留。
 
 升级时使用覆盖安装以保留应用设置。通过ADB安装时，明确使用非增量方式：
 
 ```sh
-adb install --no-incremental -r flipduo-0.6.150.apk
+adb install --no-incremental -r flipduo-0.7.4.apk
 ```
 
 公开构建配置移除了私有仪器测试依赖和本机SDK路径，提供构建该版本所需的生产源码；它不承诺逐字节复现发布者签名后的APK。

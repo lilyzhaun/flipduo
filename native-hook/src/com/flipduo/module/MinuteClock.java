@@ -20,6 +20,7 @@ final class MinuteClock {
     private final Host host;
     private final Runnable task = this::fire;
     private boolean running;
+    private boolean seconds;
 
     MinuteClock(Host host) { this.host = host; }
 
@@ -29,7 +30,12 @@ final class MinuteClock {
 
     /** Start with an immediate fresh reading, or stop and drop the pending callback. Idempotent. */
     void update(boolean wanted) {
-        if (wanted == running) return;
+        update(wanted, false);
+    }
+
+    void update(boolean wanted, boolean withSeconds) {
+        if (wanted == running && seconds == withSeconds) return;
+        seconds = withSeconds;
         running = wanted;
         host.cancel(task);
         if (wanted) { host.tick(); schedule(); }
@@ -46,5 +52,6 @@ final class MinuteClock {
         host.tick(); schedule();
     }
 
-    private void schedule() { host.post(task, delayToNextMinute(host.now())); }
+    private void schedule() { long now = host.now(); host.post(task, seconds
+            ? 1000L - Math.floorMod(now, 1000L) + MARGIN_MS : delayToNextMinute(now)); }
 }

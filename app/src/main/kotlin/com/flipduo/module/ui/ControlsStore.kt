@@ -10,6 +10,8 @@ import com.flipduo.module.FlipDuoApplication
 import com.flipduo.module.CutoutAppConfig
 import com.flipduo.module.InnerRecentsConfig
 import com.flipduo.module.NavigationLongPress
+import com.flipduo.module.HeaderTapAction
+import com.flipduo.module.ClockLines
 import com.flipduo.module.RecentsStyle
 import com.flipduo.module.RuntimeStatus
 import io.github.libxposed.service.XposedService
@@ -79,6 +81,12 @@ internal data class Controls(
     val hideCoverBottomGuard: Boolean = false,
     val coverInputMethod: String = "",
     val coverInputMethodUser: Int = -1,
+    val desktopColumns: Int = 3,
+    val showDesktopSearch: Boolean = true,
+    val trioTap: HeaderTapAction = HeaderTapAction.WIFI,
+    val clockTap: HeaderTapAction = HeaderTapAction.CLOCK,
+    val desktopDoubleTapLock: Boolean = false,
+    val clockTop: String = ClockLines.TOP, val clockBottom: String = ClockLines.BOTTOM,
 )
 internal enum class NavigationKey(val id: String, val title: String) {
     BACK("back", "返回键"), HOME("home", "桌面键"), RECENTS("recents", "最近任务键")
@@ -306,6 +314,11 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
             .putBoolean(com.flipduo.module.BottomGuardRules.KEY, c.hideCoverBottomGuard)
             .putString(CoverInputMethodConfig.KEY, c.coverInputMethod)
             .putInt(CoverInputMethodConfig.USER_KEY, c.coverInputMethodUser)
+            .putInt(com.flipduo.module.NativeDesktopColumns.KEY, c.desktopColumns)
+            .putBoolean("show_desktop_search", c.showDesktopSearch)
+            .putString("tap_trio", c.trioTap.name).putString("tap_clock", c.clockTap.name)
+            .putBoolean("desktop_double_tap_lock", c.desktopDoubleTapLock)
+            .putString("clock_top_format", c.clockTop).putString("clock_bottom_format", c.clockBottom)
             .putBoolean("hide_fullscreen_buttons", c.hideFullscreenButtons)
             .putBoolean("unrestrict_cover_apps", c.unrestrictCoverApps)
             .putString("recents_style", c.recentsStyle.name)
@@ -423,6 +436,13 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
         p.getBoolean(com.flipduo.module.BottomGuardRules.KEY, false),
         p.getString(CoverInputMethodConfig.KEY, "") ?: "",
         p.getInt(CoverInputMethodConfig.USER_KEY, -1),
+        com.flipduo.module.NativeDesktopColumns.read(p),
+        p.getBoolean("show_desktop_search", true),
+        HeaderTapAction.read(p.getString("tap_trio", null), HeaderTapAction.WIFI),
+        HeaderTapAction.read(p.getString("tap_clock", null), HeaderTapAction.CLOCK),
+        p.getBoolean("desktop_double_tap_lock", false),
+        ClockLines.read(p.getString("clock_top_format", null), ClockLines.TOP),
+        ClockLines.read(p.getString("clock_bottom_format", null), ClockLines.BOTTOM),
     )
 }
 
@@ -433,6 +453,9 @@ internal fun Controls.nativeConfig() = DockConfig().also {
     it.notificationFullscreen = notificationFullscreen
     it.hideCoverBottomGuard = hideCoverBottomGuard
     it.coverInputMethod = coverInputMethod; it.coverInputMethodUser = coverInputMethodUser
+    it.desktopColumns = desktopColumns
+    it.showDesktopSearch = showDesktopSearch; it.trioTap = trioTap; it.clockTap = clockTap
+    it.desktopDoubleTapLock = desktopDoubleTapLock; it.clockTop = clockTop; it.clockBottom = clockBottom
     it.hideFullscreenButtons = hideFullscreenButtons; it.unrestrictCoverApps = unrestrictCoverApps
     it.recentsStyle = recentsStyle; it.recentsCardLongPress = recentsCardLongPress
     it.cameraChargeTarget = cameraChargeTarget; it.cameraChargeTargetPercent = cameraChargeTargetPercent
