@@ -161,16 +161,21 @@ final class FocusEventBridge {
         });
         // HyperOS 3 has only updateContentView(boolean), which rebuilds the entire native card.
         // Do not substitute that for OS4's per-child palette update or disable the core event bridge.
-        if (FocusLightStyle.supportsContentUpdate(owner))
-            b.lightStyle = new FocusLightStyle(module, loader, b::lightStyleEnabled);
-        else NativeLog.info("Native event palette retained: host has no per-child content update");
+        try {
+            if (FocusLightStyle.supportsContentUpdate(owner))
+                b.lightStyle = new FocusLightStyle(module, loader, () -> b.lightStyle != null && b.lightStyleEnabled());
+            else NativeLog.info("Native event palette retained: host has no per-child content update");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            NativeLog.warning("Native event palette retained; event bridge still available", error);
+        }
         instance = b;
         NativeLog.info("Event island native focus hooks installed; native actions and alerts retained");
     }
 
-    static void start(Context context) {
-        if (instance == null || instance.started) return;
-        FocusEventBridge b = instance; b.context = context; b.started = true;
+    static boolean start(Context context) {
+        FocusEventBridge b = instance;
+        if (b == null) return false;
+        if (b.started) return true;
         BroadcastReceiver requests = new BroadcastReceiver() {
             public void onReceive(Context c, Intent i) {
                 if (EventWire.from(this,c,"com.miui.fliphome")) b.receive(i,getSentFromUid());
@@ -180,22 +185,34 @@ final class FocusEventBridge {
             b.registerForAllUsers.invoke(context,requests,b.allUsers,new IntentFilter(EventWire.REQUEST),
                     StatusWire.PERMISSION,b.main,Context.RECEIVER_EXPORTED);
         } catch (ReflectiveOperationException error) {
-            b.started = false; NativeLog.warning("Cannot register the authenticated event host channel",error); return;
+            NativeLog.warning("Cannot register the authenticated event host channel", error);
+            return false;
         }
         IntentFilter screen = new IntentFilter(Intent.ACTION_SCREEN_ON);
         screen.addAction(Intent.ACTION_SCREEN_OFF); screen.addAction(Intent.ACTION_USER_PRESENT);
         screen.addAction("android.intent.action.USER_SWITCHED");
-        context.registerReceiver(new BroadcastReceiver() {
+        BroadcastReceiver lifecycle = new BroadcastReceiver() {
             public void onReceive(Context c, Intent i) { b.requestUpdate(); }
-        }, screen, Context.RECEIVER_NOT_EXPORTED);
-        context.getSystemService(DisplayManager.class).registerDisplayListener(new DisplayManager.DisplayListener() {
-            public void onDisplayAdded(int id) { b.requestUpdate(); }
-            public void onDisplayRemoved(int id) { b.requestUpdate(); }
-            public void onDisplayChanged(int id) { b.requestUpdate(); }
-        }, b.main);
+        };
+        boolean lifecycleRegistered = false;
+        try {
+            context.registerReceiver(lifecycle, screen, Context.RECEIVER_NOT_EXPORTED);
+            lifecycleRegistered = true;
+            context.getSystemService(DisplayManager.class).registerDisplayListener(new DisplayManager.DisplayListener() {
+                public void onDisplayAdded(int id) { b.requestUpdate(); }
+                public void onDisplayRemoved(int id) { b.requestUpdate(); }
+                public void onDisplayChanged(int id) { b.requestUpdate(); }
+            }, b.main);
+        } catch (RuntimeException | LinkageError error) {
+            if (lifecycleRegistered) context.unregisterReceiver(lifecycle);
+            context.unregisterReceiver(requests);
+            throw error;
+        }
+        b.context = context; b.started = true;
         b.requestUpdate();
         try { b.sendState(new Intent(EventWire.STATE).putExtra("resync", true)); }
-        catch (ReflectiveOperationException error) { NativeLog.warning("Cannot initialize event island user channel",error); }
+        catch (ReflectiveOperationException | SecurityException error) { NativeLog.warning("Cannot request event host resync", error); }
+        return true;
     }
 
     static void refresh() { if (instance != null) instance.requestUpdate(); }

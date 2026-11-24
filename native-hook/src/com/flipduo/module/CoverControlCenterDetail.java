@@ -15,6 +15,7 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.WeakHashMap;
 
@@ -22,6 +23,15 @@ import java.util.WeakHashMap;
 final class CoverControlCenterDetail {
     private static final Set<ClassLoader> installed = Collections.newSetFromMap(new WeakHashMap<>());
     private static final WeakHashMap<ViewGroup, State> panels = new WeakHashMap<>();
+    private record StatusTop(int rotation, int height) { }
+    private static final HashMap<Integer, StatusTop> compressedStatusTops = new HashMap<>();
+
+    static void setCompressedStatusTop(int displayId, int rotation, int height) {
+        if (height < 0) clearCompressedStatusTop(displayId);
+        else compressedStatusTops.put(displayId, new StatusTop(rotation, height));
+    }
+
+    static void clearCompressedStatusTop(int displayId) { compressedStatusTops.remove(displayId); }
 
     static void install(NativeModule module, ClassLoader loader) throws ReflectiveOperationException {
         if (installed.contains(loader)) return;
@@ -157,7 +167,8 @@ final class CoverControlCenterDetail {
     }
 
     private static Rect area(ViewGroup panel) {
-        if (!NativeModule.config().enabled || !panel.isAttachedToWindow() || !(panel.getParent() instanceof View root)) return null;
+        DockConfig config = NativeModule.config();
+        if (!config.enabled || !panel.isAttachedToWindow() || !(panel.getParent() instanceof View root)) return null;
         Display display = panel.getDisplay(); if (display == null) return null;
         DisplayMetrics metrics = new DisplayMetrics(); display.getRealMetrics(metrics);
         if (!CutoutAppConfig.isCoverDisplay(metrics.widthPixels, metrics.heightPixels) || root.getWidth() <= 0 || root.getHeight() <= 0) return null;
@@ -167,10 +178,17 @@ final class CoverControlCenterDetail {
             left = cutout.getSafeInsetLeft(); top = cutout.getSafeInsetTop();
             right = cutout.getSafeInsetRight(); bottom = cutout.getSafeInsetBottom();
         }
+        // The status window has already resolved its hidden height. Do not resize the detail
+        // while WindowInsets catches up; other inset types and the cutout still use live geometry.
+        StatusTop status = config.hideStatus ? compressedStatusTops.get(display.getDisplayId()) : null;
+        boolean stableTop = status != null && status.rotation() == display.getRotation();
+        if (stableTop) top = Math.max(top, status.height());
         WindowInsets window = root.getRootWindowInsets();
         if (window != null) {
-            Insets bars = window.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars());
-            left = Math.max(left, bars.left); top = Math.max(top, bars.top);
+            int types = WindowInsets.Type.systemBars();
+            Insets bars = window.getInsetsIgnoringVisibility(types);
+            int barTop = stableTop ? window.getInsetsIgnoringVisibility(types & ~WindowInsets.Type.statusBars()).top : bars.top;
+            left = Math.max(left, bars.left); top = Math.max(top, barTop);
             right = Math.max(right, bars.right); bottom = Math.max(bottom, bars.bottom);
         }
         Rect safe = CoverDetailGeometry.area(metrics.widthPixels, metrics.heightPixels, left, top, right, bottom,

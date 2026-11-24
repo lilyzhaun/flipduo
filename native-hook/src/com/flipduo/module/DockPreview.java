@@ -29,9 +29,12 @@ public final class DockPreview extends FrameLayout {
     private int selected = -1, pointerId = -1;
     private float modelScale = 1, dx, dy, downX, downY, grabX, grabY;
     private final int touchSlop;
-    private final Runnable minute = new Runnable() {
-        @Override public void run() { dock.refreshPreviewClock(); postDelayed(this, 60000 - System.currentTimeMillis() % 60000); }
-    };
+    private final MinuteClock previewClock = new MinuteClock(new MinuteClock.Host() {
+        @Override public long now() { return System.currentTimeMillis(); }
+        @Override public void post(Runnable task, long delayMs) { postDelayed(task, delayMs); }
+        @Override public void cancel(Runnable task) { removeCallbacks(task); }
+        @Override public void tick() { dock.refreshPreviewClock(); }
+    });
 
     public DockPreview(Context context) {
         super(context); setWillNotDraw(false); setClipChildren(false);
@@ -60,6 +63,7 @@ public final class DockPreview extends FrameLayout {
         if (dragging && rotated == reverse && edit) return;
         cancelDrag(); rotated = reverse; editable = edit && !value.eventIsland; config = value;
         layout = DockLayout.decode(value.positions); dock.applyConfig(value);
+        syncClock();
         cameraPainter.configure(reverse, value);
         deviceFrame.configure(value);
         dock.applyAppearance(reverse);
@@ -210,6 +214,14 @@ public final class DockPreview extends FrameLayout {
         }
         layout = layout.place(selected,x,y); dock.previewLayout(layout); listener.onPositionsChanged(layout.encode()); invalidate(); return true;
     }
-    @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); post(minute); }
-    @Override protected void onDetachedFromWindow() { cancelDrag(); removeCallbacks(minute); super.onDetachedFromWindow(); }
+    private void syncClock() {
+        if (previewClock == null) return; // A View callback can run before subclass initialisation.
+        boolean visible = isAttachedToWindow() && isShown() && getWindowVisibility() == VISIBLE && config.showClock;
+        previewClock.update(visible, visible && (ClockLines.seconds(config.clockTop) || ClockLines.seconds(config.clockBottom)));
+    }
+
+    @Override protected void onVisibilityChanged(View changedView, int visibility) { super.onVisibilityChanged(changedView, visibility); syncClock(); }
+    @Override protected void onWindowVisibilityChanged(int visibility) { super.onWindowVisibilityChanged(visibility); syncClock(); }
+    @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); syncClock(); }
+    @Override protected void onDetachedFromWindow() { cancelDrag(); previewClock.update(false); super.onDetachedFromWindow(); }
 }

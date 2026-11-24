@@ -58,7 +58,8 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
     val syncFailed by store.syncFailed.collectAsState()
     val delivered = connection.connected && deliveredRevision == controls.revision
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { store.refreshSystemPolicy() }
-    val selected by rememberUpdatedState(controls.fullscreenApps)
+    val configured = remember(controls.fullscreenApps, controls.followSystemScales) { controls.configuredDisplayApps }
+    val selected by rememberUpdatedState(configured)
     LaunchedEffect(refresh) {
         loading = true; failed = false
         try {
@@ -83,11 +84,11 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
         finally { loading = false }
     }
     // Sorting is stable while toggling; a row never jumps under the next tap.
-    val visible = remember(apps, query, showSystem, selectedOnly, controls.fullscreenApps) {
+    val visible = remember(apps, query, showSystem, selectedOnly, configured) {
         val text = query.trim()
         apps.filter { app ->
-            (showSystem || !app.system || app.packageName in controls.fullscreenApps) &&
-                (!selectedOnly || app.packageName in controls.fullscreenApps) &&
+            (showSystem || !app.system || app.packageName in configured) &&
+                (!selectedOnly || app.packageName in configured) &&
                 (app.label.contains(text, ignoreCase = true) || app.packageName.contains(text, ignoreCase = true))
         }
     }
@@ -103,7 +104,7 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 AppFilter("全部", !selectedOnly) { selectedOnly = false }
-                AppFilter("已启用 ${controls.fullscreenApps.size}", selectedOnly) { selectedOnly = true }
+                AppFilter("已设置 ${configured.size}", selectedOnly) { selectedOnly = true }
                 AppFilter("系统应用", showSystem, Role.Checkbox) { showSystem = !showSystem }
             }
         }
@@ -112,6 +113,8 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
                 !connection.connected -> "设置仅保存在本机，连接 LSPosed 后自动同步。"
                 syncFailed -> "设置仅保存在本机，请点击刷新重试同步。"
                 !delivered -> "正在同步设置…"
+                policy.scalingReady && (policy.loadedVersion ?: 0L) < CutoutAppConfig.SYSTEM_SCALE_POLICY_VERSION ->
+                    "当前系统策略支持全屏模式。要使用“跟随系统”的内容大小，请先重启手机加载新版模块。"
                 policy.checked -> policy.summary
                 else -> "正在核对系统策略…"
             }
@@ -140,7 +143,7 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
                 Text("无法读取应用列表，请点击右上角刷新。", modifier = Modifier.padding(16.dp))
             }
             visible.isEmpty() -> item(key = "empty") {
-                Text(if (query.isNotBlank()) "没有匹配的应用" else if (selectedOnly) "还没有启用的应用" else "没有可显示的应用",
+                Text(if (query.isNotBlank()) "没有匹配的应用" else if (selectedOnly) "还没有设置的应用" else "没有可显示的应用",
                     color = uiColors().secondary, modifier = Modifier.padding(16.dp))
             }
             else -> items(visible, key = { it.packageName }, contentType = { "app" }) { app ->
@@ -148,13 +151,13 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
                 val trueFullscreen = app.packageName in controls.trueFullscreenApps
                 val mode = if (!enabled) 0 else if (trueFullscreen) 2 else 1
                 val modes = listOf("跟随系统", "保留挖孔全屏", "真全屏")
-                val defaultScale = CutoutAppConfig.defaultScale(trueFullscreen)
-                val percent = controls.fullscreenScales[app.packageName] ?: defaultScale
+                val defaultScale = if (enabled) CutoutAppConfig.defaultScale(trueFullscreen) else CutoutAppConfig.SYSTEM_SCALE
+                val percent = (if (enabled) controls.fullscreenScales else controls.followSystemScales)[app.packageName] ?: defaultScale
                 val expanded = expandedPackage == app.packageName
                 Card(Modifier.fillMaxWidth().managerDisclosure(), insideMargin = PaddingValues(0.dp)) {
                     ArrowPreference(title = app.label,
-                        summary = if (app.info == null) "未安装或无桌面入口 · ${modes[mode]}" else
-                            if (enabled) "${modes[mode]} · ${percent}%" else modes[mode],
+                        summary = (if (app.info == null) "未安装或无桌面入口 · " else "") + modes[mode] +
+                            (if (app.packageName in configured) " · ${percent}%" else ""),
                         startAction = { FullscreenAppIcon(app, pm) },
                         onClick = { expandedPackage = if (expanded) null else app.packageName })
                     if (expanded) {
@@ -171,14 +174,11 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
                         Text(when (mode) {
                             1 -> "扩展应用画布，保留系统挖孔信息，由应用决定如何避让镜头。原有全屏设置沿用此模式。"
                             2 -> "忽略挖孔避让，应用可铺满外屏；镜头位置的内容可能被硬件遮住。"
-                            else -> "使用系统原生显示方式，保留已保存的模式与大小参数。"
+                            else -> "保留系统窗口范围和镜头避让。可单独调整内容大小，100% 为系统原大小。"
                         }, color = uiColors().secondary, fontSize = 13.sp, lineHeight = 19.sp,
                             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 16.dp))
-                    }
-                    if (expanded && enabled) {
-                        var draft by remember(app.packageName, percent) { mutableFloatStateOf(percent.toFloat()) }
-                        fun save(value: Int) = store.update { current -> current.copy(fullscreenScales =
-                            current.fullscreenScales + (app.packageName to value)) }
+                        var draft by remember(app.packageName, mode, percent) { mutableFloatStateOf(percent.toFloat()) }
+                        fun save(value: Int) = store.update { it.withContentScale(app.packageName, value) }
                         Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("内容大小", fontSize = 14.sp, color = uiColors().secondary)
@@ -193,7 +193,7 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
                             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("70% — 110%", fontSize = 12.sp, color = uiColors().secondary)
-                                ManagerActionButton(text = "恢复 ${defaultScale}%", compact = true, onClick = { save(defaultScale) })
+                                ManagerActionButton(text = if (enabled) "恢复 ${defaultScale}%" else "恢复系统大小", compact = true, onClick = { save(defaultScale) })
                             }
                         }
                     }

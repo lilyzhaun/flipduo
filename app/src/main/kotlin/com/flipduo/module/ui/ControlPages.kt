@@ -542,6 +542,10 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
         CoverInputMethodPage(store, c, back, scrollState)
         return
     }
+    if (panel == SettingsPanel.HIDE_OUTER) {
+        HideOuterPage(store, c, back, scrollState)
+        return
+    }
     val screenshotScope by store.screenshotScope.collectAsState()
     val systemScope by store.systemScope.collectAsState()
     val connection by store.connection.collectAsState()
@@ -551,11 +555,11 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
     // Each category is a real saveable NavEntry, using the same push/pop animation as About.
     PageFrame(panel.title, onBack = if (panel == SettingsPanel.MENU) null else back, scrollState = scrollState) {
         when (panel) {
-        SettingsPanel.INPUT_METHOD -> Unit // Dedicated picker above shares this category's navigation entry.
+        SettingsPanel.INPUT_METHOD, SettingsPanel.HIDE_OUTER -> Unit // Dedicated pickers above share the category's navigation entry.
         SettingsPanel.MENU -> {
         item { SmallTitle("外屏功能") }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
-            ArrowPreference(title = "应用全屏", summary = "已启用 ${c.fullscreenApps.size} 个应用 · 模式与内容大小", onClick = fullscreenApps)
+            ArrowPreference(title = "应用全屏", summary = "已设置 ${c.configuredDisplayApps.size} 个应用 · 模式与内容大小", onClick = fullscreenApps)
             SettingsPanel.entries.filter { it != SettingsPanel.MENU }.forEach { destination ->
                 ArrowPreference(title = destination.title, summary = destination.summary, onClick = { selectPanel(destination) })
             }

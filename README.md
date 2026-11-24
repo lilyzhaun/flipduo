@@ -13,6 +13,8 @@ This repository contains the public production source and build files for **0.7.
 - Configurable tap actions for the status indicator and clock, and independent formats for both clock lines.
 - Black or live blurred backgrounds beside supported apps.
 - Per-app fullscreen options and cover-screen recent-task customization.
+- **Hide cover-screen state:** choose the regular layout for supported Xiaomi apps, including Calendar, Contacts and Dialer, Clock, Messaging, Recorder, Calculator, and compatible Gallery versions. All choices are off by default.
+- Adjust an app's cover-screen content size from 70% to 110% while keeping its system window layout. The default is 100%; fullscreen scaling is saved separately.
 - Optional full-width notifications and framed cover-screen screenshots.
 - Native cover control-center long-press actions with compact, camera-safe detail panels.
 - Named local appearance presets and per-user selection of an enabled cover-screen keyboard.
@@ -24,6 +26,8 @@ Features depend on the device's firmware and the enabled module scopes. Fullscre
 ## Compatibility
 
 The compatibility targets are MIX Flip (`ruyi`) on HyperOS 3 and MIX Flip 2 (`bixi`) on HyperOS 3 or 4. Firmware-specific behavior requires verification on the corresponding device; these targets are not a guarantee that every feature works on every firmware.
+
+For regular app layouts, select an app under **Settings → Hide cover-screen state**, grant its LSPosed scope, and reopen the app. The Rust Gallery option is a separate experiment limited to MIX Flip 2 on `OS4.0.4.0.XOHCNXM` with Gallery `5.4.3.12-1116-cn`. It uses the System Framework scope; access to the full Gallery home screen on that combination is not yet confirmed. Both this experiment and follow-system scaling require the updated module to load in System Framework after a manual device restart.
 
 On the first-generation MIX Flip running HyperOS 3, you can dismiss the notification list opened from the cover-screen bell and use the side controls again without opening a notification. Reload System UI after updating to load this fix.
 
@@ -87,7 +91,7 @@ The public source distribution does not include private signing material, test s
 
 ## Source releases
 
-The source tag for this update is [`v0.7.9`](https://github.com/lilyzhaun/flipduo/tree/v0.7.9). Signed builds, when published, are listed under [Releases](https://github.com/lilyzhaun/flipduo/releases).
+For 0.7.9 (177), use the [signed APK](https://github.com/lilyzhaun/flipduo/releases/download/v0.7.9-full/flipduo-0.7.9.apk) and its [complete source tag, `v0.7.9-full`](https://github.com/lilyzhaun/flipduo/tree/v0.7.9-full). The earlier `v0.7.9` tag contains only the notification fix on top of 0.7.4. See the [release notes](https://github.com/lilyzhaun/flipduo/releases/tag/v0.7.9-full) for all changes since 0.7.4.
 
 Update in place to retain app settings. For ADB installation, explicitly use the non-incremental path:
 

@@ -19,19 +19,16 @@ import io.github.libxposed.api.XposedInterface;
 import java.lang.reflect.*;
 import java.util.List;
 import java.util.Set;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Per-app cover modes: preserve the original cutout, or opt into MixFlipMod true fullscreen. */
 final class AppCutoutHook {
     private static final String FULL_SCREEN = "miui.supportFlipFullScreen";
     private static final String WATCH_OVERLAY = "miui.supportFlipWatchOverlayGroupView";
-    private volatile boolean ready;
-    private volatile Set<String> enabledApps = Set.of();
-    private volatile Map<String, Integer> scales = Map.of();
-    private volatile Set<String> trueFullscreenApps = Set.of();
+    private volatile CutoutAppConfig.Snapshot policy = CutoutAppConfig.Snapshot.EMPTY;
     private Method removeSourceAt;
     private DisplayCutout noCutout;
+    private RustGalleryLayout galleryLayout;
     private final Set<String> reportedPackages = ConcurrentHashMap.newKeySet();
     private final Set<String> reportedConfigurations = ConcurrentHashMap.newKeySet();
     private SharedPreferences preferences;
@@ -70,6 +67,8 @@ final class AppCutoutHook {
         propertyConstructor.setAccessible(true);
 
         Class<?> activity = loader.loadClass("com.android.server.wm.ActivityRecord");
+        try { galleryLayout = RustGalleryLayout.resolve(activity); }
+        catch (ReflectiveOperationException | RuntimeException | LinkageError error) { NativeModule.warning("Rust Gallery layout option unavailable", error); }
         Class<?> controller = loader.loadClass("com.android.server.wm.BoundsCompatController");
         Field owner = field(controller, "mOwner"), packageName = field(activity, "packageName");
         Method fixedAspect = method(controller, "canUseFixedAspectRatio", Configuration.class);
@@ -105,33 +104,35 @@ final class AppCutoutHook {
         hook(activityInfo, chain -> {
             Object result = chain.proceed();
             // Cover capability is a declaration, not the display state at the moment PackageManager was queried.
-            if (!(result instanceof ActivityInfo info) || !selected(info.packageName)) return result;
+            if (!(result instanceof ActivityInfo info) || !policy.selected(info.packageName)) return result;
             ActivityInfo copy = new ActivityInfo(info);
             copy.metaData = fullscreenMetadata(info.metaData);
             return copy;
         });
         hook(applicationInfo, chain -> {
             Object result = chain.proceed();
-            if (!(result instanceof ApplicationInfo info) || !selected(info.packageName)) return result;
+            if (!(result instanceof ApplicationInfo info) || !policy.selected(info.packageName)) return result;
             ApplicationInfo copy = new ApplicationInfo(info);
             copy.metaData = fullscreenMetadata(info.metaData);
             return copy;
         });
         hook(fixedAspect, chain -> {
             Object result = chain.proceed();
-            if (!ready || enabledApps.isEmpty()) return result;
+            CutoutAppConfig.Snapshot snapshot = policy;
+            if (snapshot.apps().isEmpty()) return result;
             Object record = owner.get(chain.getThisObject());
-            return record != null && selected(packageName.get(record)) && cover(displayConfiguration(record)) ? false : result;
+            return record != null && snapshot.selected(packageName.get(record)) && cover(displayConfiguration(record)) ? false : result;
         });
         hook(property, chain -> {
-            if (WATCH_OVERLAY.equals(chain.getArg(0)) && selected(chain.getArg(1))) {
-                return propertyConstructor.newInstance(WATCH_OVERLAY, !trueFullscreen(chain.getArg(1)), chain.getArg(1), chain.getArg(2));
+            CutoutAppConfig.Snapshot snapshot = policy;
+            if (WATCH_OVERLAY.equals(chain.getArg(0)) && snapshot.selected(chain.getArg(1))) {
+                return propertyConstructor.newInstance(WATCH_OVERLAY, !snapshot.trueFullscreen(chain.getArg(1), noCutout != null), chain.getArg(1), chain.getArg(2));
             }
             return chain.proceed();
         });
         hook(cutoutMode, chain -> {
             WindowManager.LayoutParams lp = (WindowManager.LayoutParams) chain.getArg(0);
-            if (lp != null && selected(lp.packageName) && lp.token != null) {
+            if (lp != null && policy.selected(lp.packageName) && lp.token != null) {
                 Object record = activityForToken.invoke(null, lp.token);
                 if (record != null && cover(displayConfiguration(record))) return WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
             }
@@ -141,10 +142,23 @@ final class AppCutoutHook {
             Object result = chain.proceed();
             Object record = chain.getThisObject();
             String pkg = (String) packageName.get(record);
-            if (selected(pkg)) {
+            CutoutAppConfig.Snapshot snapshot = policy;
+            boolean forced = snapshot.selected(pkg);
+            Integer systemPercent = pkg == null ? null : snapshot.systemScales().get(pkg);
+            boolean gallery = snapshot.rustGalleryLayout() && galleryLayout != null && RustGalleryLayout.PACKAGE.equals(pkg);
+            if (forced || systemPercent != null || gallery) {
                 Configuration base = displayConfiguration(record);
+                Configuration parent = (Configuration) chain.getArg(0);
                 Configuration resolved = (Configuration) getResolved.invoke(record);
-                if (cover(base) && fullscreen(resolved, (Configuration) chain.getArg(0))) fullAppBounds(resolved, pkg, base);
+                if (cover(base) && fullscreen(resolved, parent)) {
+                    if (forced) fullAppBounds(resolved, pkg, base, snapshot.scaleFor(pkg, noCutout != null));
+                    else if (systemPercent != null) scaleSystemContent(resolved, parent, systemPercent);
+                    if (gallery) {
+                        Rect max = galleryLayout.apply(record, resolved, parent, base);
+                        if (max != null && reportedConfigurations.add("gallery:regularLayout"))
+                            NativeModule.info("Rust Gallery MainActivity override prepared: screenType=0 maxBounds=" + max);
+                    }
+                }
             }
             // On the inner display the freshly resolved native configuration is left untouched. No cached cover DPI
             // survives here: ConfigurationContainer rebuilt this override before comparison and IPC dispatch.
@@ -154,27 +168,32 @@ final class AppCutoutHook {
             Object result = chain.proceed();
             List<?> processPackages = (List<?>) packages.get(chain.getThisObject());
             Object record = configActivity.get(chain.getThisObject());
-            if (ready && record != null && !processPackages.isEmpty() && processPackages.stream().allMatch(enabledApps::contains)) {
+            CutoutAppConfig.Snapshot snapshot = policy;
+            // Follow-system uses the normal Activity -> merged override -> process listener. Do not scale it twice.
+            if (record != null && !processPackages.isEmpty() && processPackages.stream().allMatch(snapshot::selected)) {
                 String pkg = (String) processPackages.get(0);
-                if (processPackages.stream().allMatch(p -> scaleFor(p) == scaleFor(pkg))) {
+                boolean supportsTrueFullscreen = noCutout != null;
+                int percent = snapshot.scaleFor(pkg, supportsTrueFullscreen);
+                if (processPackages.stream().allMatch(p -> snapshot.scaleFor(p, supportsTrueFullscreen) == percent)) {
                     Configuration base = displayConfiguration(record);
                     Configuration activityConfig = (Configuration) getConfiguration.invoke(record);
                     if (cover(base) && fullscreen(activityConfig, activityConfig))
-                        fullAppBounds((Configuration) getResolved.invoke(chain.getThisObject()), pkg, base);
+                        fullAppBounds((Configuration) getResolved.invoke(chain.getThisObject()), pkg, base, percent);
                 }
             }
             return result;
         });
         hook(fillInsets, chain -> {
             Object result = chain.proceed();
-            if (!ready || enabledApps.isEmpty()) return result;
+            CutoutAppConfig.Snapshot snapshot = policy;
+            if (snapshot.apps().isEmpty()) return result;
             String pkg = (String) owningPackage.invoke(chain.getThisObject());
             // Use the target display, not the density/compat-scaled frame being sent to this client.
-            if (!selected(pkg) || !cover(displayConfiguration(chain.getThisObject()))) return result;
+            if (!snapshot.selected(pkg) || !cover(displayConfiguration(chain.getThisObject()))) return result;
             Object w = chain.getThisObject(), out = chain.getArg(0);
             Configuration config = (Configuration) getConfiguration.invoke(w);
             if (!fullscreen(config, config)) return result;
-            if (trueFullscreen(pkg)) {
+            if (snapshot.trueFullscreen(pkg, noCutout != null)) {
                 // Upstream: only this IPC output loses camera avoidance. Never mutate the shared source.
                 setCutout.invoke(out, noCutout);
                 for (int i = (int) sourceSize.invoke(out) - 1; i >= 0; i--) {
@@ -208,26 +227,22 @@ final class AppCutoutHook {
         preferences = module.getRemotePreferences(DockConfig.GROUP);
         preferenceListener = (prefs, key) -> {
             if (key == null || CutoutAppConfig.KEY.equals(key) || CutoutAppConfig.LEGACY_KEY.equals(key)
-                    || CutoutAppConfig.SCALES_KEY.equals(key) || CutoutAppConfig.TRUE_FULLSCREEN_KEY.equals(key)) readPreference();
+                    || CutoutAppConfig.SCALES_KEY.equals(key) || CutoutAppConfig.TRUE_FULLSCREEN_KEY.equals(key)
+                    || CutoutAppConfig.SYSTEM_SCALES_KEY.equals(key) || RustGalleryLayout.KEY.equals(key) || "enabled".equals(key)) readPreference();
         };
         preferences.registerOnSharedPreferenceChangeListener(preferenceListener);
-        ready = true;
         readPreference();
-        NativeModule.info("AppCutout v135 system hooks installed; restored pre-v130 fullscreen boundary; no display-query, metrics or computeFrames hook");
+        NativeModule.info("AppCutout system hooks installed; Rust Gallery layout policy " + RustGalleryLayout.POLICY_VERSION
+                + " available=" + (galleryLayout != null));
     }
 
     private void readPreference() {
-        scales = CutoutAppConfig.readScales(preferences);
-        trueFullscreenApps = CutoutAppConfig.readTrueFullscreen(preferences);
-        enabledApps = CutoutAppConfig.read(preferences);
+        CutoutAppConfig.Snapshot snapshot = CutoutAppConfig.snapshot(preferences);
+        policy = snapshot;
         reportedPackages.clear();
         reportedConfigurations.clear();
-        NativeModule.info("AppCutout selected=" + enabledApps + " trueFullscreen=" + trueFullscreenApps
-                + " scales=" + scales + "; reopen changed apps to refresh their windows");
-    }
-
-    private boolean selected(Object pkg) {
-        return ready && pkg instanceof String && enabledApps.contains(pkg);
+        NativeModule.info("AppCutout selected=" + snapshot.apps() + " trueFullscreen=" + snapshot.trueFullscreenApps()
+                + " scales=" + snapshot.scales() + "; reopen changed apps to refresh their windows");
     }
 
     private Configuration displayConfiguration(Object container) throws ReflectiveOperationException {
@@ -251,10 +266,24 @@ final class AppCutoutHook {
         return copy;
     }
 
-    private boolean trueFullscreen(Object pkg) { return selected(pkg) && noCutout != null && trueFullscreenApps.contains(pkg); }
-    private int scaleFor(Object pkg) { return scales.getOrDefault(pkg, CutoutAppConfig.defaultScale(trueFullscreen(pkg))); }
+    /** The OEM has just resolved this activity. Inherit undefined fields from its task, not the whole display. */
+    private static void scaleSystemContent(Configuration resolved, Configuration parent, int percent) {
+        int dpi = resolved.densityDpi > 0 ? resolved.densityDpi : parent.densityDpi;
+        if (dpi <= 0) return;
+        int scaledDpi = CutoutAppConfig.densityFor(dpi, percent);
+        if (scaledDpi == dpi) return;
+        resolved.screenWidthDp = scaledDp(resolved.screenWidthDp, parent.screenWidthDp, dpi, scaledDpi);
+        resolved.screenHeightDp = scaledDp(resolved.screenHeightDp, parent.screenHeightDp, dpi, scaledDpi);
+        resolved.smallestScreenWidthDp = scaledDp(resolved.smallestScreenWidthDp, parent.smallestScreenWidthDp, dpi, scaledDpi);
+        resolved.densityDpi = scaledDpi;
+    }
 
-    private void fullAppBounds(Configuration config, String pkg, Configuration base) throws ReflectiveOperationException {
+    private static int scaledDp(int overrideDp, int inheritedDp, int dpi, int scaledDpi) {
+        int dp = overrideDp > 0 ? overrideDp : inheritedDp;
+        return dp > 0 ? Math.max(1, Math.round(dp * (float) dpi / scaledDpi)) : overrideDp;
+    }
+
+    private void fullAppBounds(Configuration config, String pkg, Configuration base, int percent) throws ReflectiveOperationException {
         Object wc = windowConfiguration.get(config);
         Rect bounds = (Rect) getBounds.invoke(wc);
         if (bounds.isEmpty()) bounds = (Rect) getBounds.invoke(windowConfiguration.get(base));
@@ -262,7 +291,6 @@ final class AppCutoutHook {
         // Always derive from the target display, never from a previously scaled activity/process override.
         int originalDpi = base.densityDpi;
         if (originalDpi <= 0) return;
-        int percent = scaleFor(pkg);
         config.densityDpi = CutoutAppConfig.densityFor(originalDpi, percent);
         if (!bounds.isEmpty()) {
             config.screenWidthDp = CutoutAppConfig.dpFor(bounds.width(), config.densityDpi);

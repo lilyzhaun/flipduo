@@ -49,6 +49,7 @@ final class StockAppSearchPanel extends LinearLayout {
     private final Runnable dismissed;
     private final EditText query;
     private final TextView status;
+    private final ListView list;
     private final Results results = new Results();
     private final int foreground, secondary, previousSoftInput;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -83,7 +84,7 @@ final class StockAppSearchPanel extends LinearLayout {
         status = new TextView(activity); status.setTextColor(secondary); status.setTextSize(13);
         status.setPadding(dp(4), dp(8), dp(4), dp(8)); status.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
         status.setText("正在读取本机应用…"); addView(status);
-        ListView list = new ListView(activity); list.setAdapter(results); list.setDivider(null);
+        list = new ListView(activity); list.setAdapter(results); list.setDivider(null);
         list.setOnItemClickListener((parent, view, position, id) -> launch(visible.get(position)));
         addView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         query.addTextChangedListener(new TextWatcher() {
@@ -187,6 +188,14 @@ final class StockAppSearchPanel extends LinearLayout {
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
+    /** The row that started the request may have been recycled. Update the live binding instead. */
+    static void updateDisplayedIcon(ViewGroup rows, String packageName, Drawable drawable) {
+        for (int i = 0; i < rows.getChildCount(); i++) {
+            if (rows.getChildAt(i) instanceof LinearLayout row && row.getChildAt(0) instanceof ImageView icon
+                    && packageName.equals(icon.getTag())) icon.setImageDrawable(drawable);
+        }
+    }
+
     private final class Results extends BaseAdapter {
         public int getCount() { return visible.size(); }
         public Object getItem(int position) { return visible.get(position); }
@@ -217,7 +226,10 @@ final class StockAppSearchPanel extends LinearLayout {
                     Drawable loaded = activity.getPackageManager().getApplicationIcon(app.packageName());
                     main.post(() -> {
                         pendingIcons.remove(app.packageName());
-                        if (!closed) { icons.put(app.packageName(), loaded); if (app.packageName().equals(icon.getTag())) icon.setImageDrawable(loaded); }
+                        if (!closed) {
+                            icons.put(app.packageName(), loaded);
+                            updateDisplayedIcon(list, app.packageName(), loaded);
+                        }
                     });
                 } catch (PackageManager.NameNotFoundException | SecurityException ignored) {
                     // Package removal/visibility change during the query is normal; launching revalidates it.

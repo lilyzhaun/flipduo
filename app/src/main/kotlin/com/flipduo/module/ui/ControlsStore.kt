@@ -11,9 +11,11 @@ import com.flipduo.module.CutoutAppConfig
 import com.flipduo.module.InnerRecentsConfig
 import com.flipduo.module.NavigationLongPress
 import com.flipduo.module.HeaderTapAction
+import com.flipduo.module.HideOuterApp
 import com.flipduo.module.ClockLines
 import com.flipduo.module.RecentsStyle
 import com.flipduo.module.RuntimeStatus
+import com.flipduo.module.RustGalleryLayout
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.HookedTarget
 import kotlinx.coroutines.*
@@ -87,7 +89,20 @@ internal data class Controls(
     val clockTap: HeaderTapAction = HeaderTapAction.CLOCK,
     val desktopDoubleTapLock: Boolean = false,
     val clockTop: String = ClockLines.TOP, val clockBottom: String = ClockLines.BOTTOM,
+    val hideOuterApps: Set<String> = emptySet(),
+    val followSystemScales: Map<String, Int> = emptyMap(),
+    val rustGalleryLayout: Boolean = false,
 )
+
+internal val Controls.configuredDisplayApps: Set<String> get() = fullscreenApps + followSystemScales.keys
+
+internal fun Controls.withContentScale(pkg: String, percent: Int): Controls {
+    val scale = CutoutAppConfig.clampScale(percent)
+    return if (pkg in fullscreenApps) copy(fullscreenScales = fullscreenScales + (pkg to scale))
+    else copy(followSystemScales = if (scale == CutoutAppConfig.SYSTEM_SCALE) followSystemScales - pkg else followSystemScales + (pkg to scale))
+}
+
+private fun encodeScales(scales: Map<String, Int>) = scales.toSortedMap().entries.joinToString(";") { "${it.key}=${CutoutAppConfig.clampScale(it.value)}" }
 internal enum class NavigationKey(val id: String, val title: String) {
     BACK("back", "返回键"), HOME("home", "桌面键"), RECENTS("recents", "最近任务键")
 }
@@ -339,9 +354,12 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
             .putBoolean("symmetric_corners", c.symmetricCorners)
             .putInt("status_bar_height", c.statusBarHeight).putBoolean("framed_screenshots", c.framedScreenshots)
             .putStringSet(CutoutAppConfig.KEY, c.fullscreenApps)
+            .putStringSet(HideOuterApp.KEY, c.hideOuterApps)
+            .putBoolean(RustGalleryLayout.KEY, c.rustGalleryLayout)
             .putStringSet(CutoutAppConfig.TRUE_FULLSCREEN_KEY, c.trueFullscreenApps)
             .putBoolean(CutoutAppConfig.LEGACY_KEY, CutoutAppConfig.LEGACY_TARGET in c.fullscreenApps)
-            .putString(CutoutAppConfig.SCALES_KEY, c.fullscreenScales.toSortedMap().entries.joinToString(";") { "${it.key}=${CutoutAppConfig.clampScale(it.value)}" })
+            .putString(CutoutAppConfig.SCALES_KEY, encodeScales(c.fullscreenScales))
+            .putString(CutoutAppConfig.SYSTEM_SCALES_KEY, encodeScales(c.followSystemScales))
             .putBoolean("event_island", c.eventIsland)
             .putBoolean("island_lock", c.islandLock)
             .putBoolean("landscape_compat", c.landscapeCompat)
@@ -443,6 +461,9 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
         p.getBoolean("desktop_double_tap_lock", false),
         ClockLines.read(p.getString("clock_top_format", null), ClockLines.TOP),
         ClockLines.read(p.getString("clock_bottom_format", null), ClockLines.BOTTOM),
+        HideOuterApp.read(p),
+        followSystemScales = CutoutAppConfig.readSystemScales(p),
+        rustGalleryLayout = p.getBoolean(RustGalleryLayout.KEY, false),
     )
 }
 

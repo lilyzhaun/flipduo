@@ -9,7 +9,7 @@ package com.flipduo.module.ui
 internal enum class SettingsGroup(val title: String) {
     CONTROLS("控件布局"), CAMERA("镜头圆环"), STATUS("时钟显示"), TRIO("三合一"), CORNERS("应用侧圆角"),
     BEHAVIOR("外屏行为"), NAVIGATION("控制区动作"), FEEDBACK("触感与动画"), SCREENSHOTS("外屏截图"),
-    COMPATIBILITY("兼容设置"), FULLSCREEN("应用全屏"), INPUT_METHOD("外屏输入法"), DESKTOP("外屏桌面");
+    COMPATIBILITY("兼容设置"), FULLSCREEN("应用全屏"), INPUT_METHOD("外屏输入法"), DESKTOP("外屏桌面"), HIDE_OUTER("隐藏外屏状态");
 
     /** This group's business values, compared to detect which groups a commit touched. */
     fun values(c: Controls): List<Any?> = when (this) {
@@ -29,8 +29,9 @@ internal enum class SettingsGroup(val title: String) {
         FEEDBACK -> listOf(c.haptics, c.animations, c.animationMs)
         SCREENSHOTS -> listOf(c.framedScreenshots)
         COMPATIBILITY -> listOf(c.unrestrictCoverApps, c.innerRecentsCompat)
-        FULLSCREEN -> listOf(c.fullscreenApps, c.fullscreenScales, c.hideFullscreenButtons, c.trueFullscreenApps)
+        FULLSCREEN -> listOf(c.fullscreenApps, c.fullscreenScales, c.hideFullscreenButtons, c.trueFullscreenApps, c.followSystemScales)
         INPUT_METHOD -> listOf(c.coverInputMethod, c.coverInputMethodUser)
+        HIDE_OUTER -> listOf(c.hideOuterApps, c.rustGalleryLayout)
         DESKTOP -> listOf(c.desktopColumns, c.showDesktopSearch, c.desktopDoubleTapLock)
     }
 
@@ -67,9 +68,10 @@ internal enum class SettingsGroup(val title: String) {
         SCREENSHOTS -> target.copy(framedScreenshots = from.framedScreenshots)
         COMPATIBILITY -> target.copy(unrestrictCoverApps = from.unrestrictCoverApps, innerRecentsCompat = from.innerRecentsCompat)
         FULLSCREEN -> target.copy(fullscreenApps = from.fullscreenApps, fullscreenScales = from.fullscreenScales,
-            trueFullscreenApps = from.trueFullscreenApps,
+            trueFullscreenApps = from.trueFullscreenApps, followSystemScales = from.followSystemScales,
             hideFullscreenButtons = from.hideFullscreenButtons)
         INPUT_METHOD -> target.copy(coverInputMethod = from.coverInputMethod, coverInputMethodUser = from.coverInputMethodUser)
+        HIDE_OUTER -> target.copy(hideOuterApps = from.hideOuterApps, rustGalleryLayout = from.rustGalleryLayout)
         DESKTOP -> target.copy(desktopColumns = from.desktopColumns, showDesktopSearch = from.showDesktopSearch, desktopDoubleTapLock = from.desktopDoubleTapLock)
     }
 

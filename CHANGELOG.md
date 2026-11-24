@@ -2,6 +2,13 @@
 
 ## 0.7.9
 
+Changes since 0.7.4:
+
+- Choose the regular layout on the cover screen for supported Xiaomi apps: Calendar, Contacts and Dialer, Clock, Messaging, Recorder, Calculator, and compatible Gallery versions. This is off by default and can be enabled per app.
+- A separate experimental Gallery switch targets MIX Flip 2 on `OS4.0.4.0.XOHCNXM` with Rust Gallery `5.4.3.12-1116-cn`. It preserves the actual window size and scaling; access to the full Gallery home screen still needs device confirmation.
+- Set cover-screen content size per app from 70% to 110% in Follow system mode. Restore 100% for the system default without changing the app's fullscreen scale.
+- The clock preview follows seconds and time-zone changes, and long clock formats stay within their lines. App search now shows the right icons when rows are reused.
+- Control Center detail panels keep a stable top margin when the cover status bar is hidden. If a host component cannot start, other status and event controls can still load.
 - On the first-generation MIX Flip running HyperOS 3, closing the notification list opened from the cover-screen bell now restores access to the side controls. There is no need to open a notification first.
 
 ## 0.7.4
