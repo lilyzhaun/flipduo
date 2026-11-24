@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.9
+
+- On the first-generation MIX Flip running HyperOS 3, closing the notification list opened from the cover-screen bell now restores access to the side controls. There is no need to open a notification first.
+
 ## 0.7.4
 
 Changes since 0.6.150:
