@@ -605,7 +605,10 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
             SwitchPreference(title = "空闲锁屏按钮", summary = "事件岛下方显示一键锁屏；有活动或面板接管时自动隐藏。不影响经典布局的锁屏工具。",
                 checked = c.islandLock, onCheckedChange = { store.update { old -> old.copy(islandLock = it) } })
             SwitchPreference(title = "外屏横屏适配", summary = "横屏时重排导航与事件岛，圆环仍贴合镜头；关闭后横屏使用系统原布局。不强制旋转应用或改变视频比例。",
-                 checked = c.landscapeCompat, onCheckedChange = { store.update { old -> old.copy(landscapeCompat = it) } })
+                  checked = c.landscapeCompat, onCheckedChange = { store.update { old -> old.copy(landscapeCompat = it) } })
+            SwitchPreference(title = "修正外屏控制中心旋转偏移", checked = c.fixControlCenterRotation,
+                summary = "横屏转回竖屏后，如果控制中心卡片偏到镜头下方或被裁切，可开启此项。无需开启横屏适配。",
+                onCheckedChange = { value -> store.update { it.copy(fixControlCenterRotation = value) } })
         } }
         item { SmallTitle("系统入口") }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {

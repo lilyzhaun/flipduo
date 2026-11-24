@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.14
+
+Changes since the complete 0.7.9 release (`v0.7.9-full`):
+
+- Add an optional fix for Control Center cards staying offset after rotating the cover screen back to portrait. It is off by default and works independently of landscape adaptation.
+- With landscape adaptation enabled, the notification shade and Control Center stay open during layout updates. With the cameras at the top, the status icons stay above the brightness and volume sliders instead of jumping onto them. With the cameras at the bottom, the clear-notifications button sits beside them, aligned with their center and clear of the cards.
+- The cover launcher Search button now provides tap feedback when haptics are enabled. Swipe left to leave search; vertical scrolling and text editing keep their normal behavior.
+- The opt-in Rust Gallery regular-layout experiment no longer requires an exact device, firmware, Gallery version, or split-package configuration. The Java Gallery path is unchanged. Full access to the native Gallery home screen still needs device confirmation.
+
+The landscape status-icon and clear-button changes were confirmed on MIX Flip 2 / HyperOS 4. Layout and rotation checks also used the separate MIX Flip and MIX Flip 2 HyperOS 3 ROMs; the new behavior has not been verified on either HyperOS 3 device.
+
 ## 0.7.9
 
 Changes since 0.7.4:

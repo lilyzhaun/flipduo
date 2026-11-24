@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -20,10 +21,12 @@ import android.util.TypedValue;
 import android.util.LruCache;
 import android.view.Display;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.BaseAdapter;
@@ -60,9 +63,14 @@ final class StockAppSearchPanel extends LinearLayout {
     private List<AppSearchIndex.App> apps = List.of(), visible = List.of();
     private boolean closed, loading = true, failed;
     private final Runnable keyboard;
+    private final StockSearchSwipe swipe;
+    private final Rect queryArea = new Rect();
+    private final AccessibilityManager accessibilityManager;
 
     StockAppSearchPanel(Activity activity, Runnable dismissed) {
         super(activity); this.activity = activity; this.dismissed = dismissed;
+        accessibilityManager = activity.getSystemService(AccessibilityManager.class);
+        swipe = new StockSearchSwipe(this, this::close, super::dispatchTouchEvent);
         setOrientation(VERTICAL); setClickable(true); setFocusable(true);
         boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         foreground = dark ? Color.WHITE : 0xff191919; secondary = dark ? 0xffbcbcbc : 0xff595959;
@@ -159,8 +167,19 @@ final class StockAppSearchPanel extends LinearLayout {
         }
     }
 
+    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+        if (closed) return true;
+        boolean allowStart = false;
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            query.getDrawingRect(queryArea); offsetDescendantRectToMyCoords(query, queryArea);
+            allowStart = !queryArea.contains((int) event.getX(), (int) event.getY())
+                    && (accessibilityManager == null || !accessibilityManager.isTouchExplorationEnabled());
+        }
+        return swipe.dispatch(event, allowStart);
+    }
+
     void close() {
-        if (closed) return; closed = true; removeCallbacks(keyboard);
+        if (closed) return; closed = true; swipe.reset(); removeCallbacks(keyboard);
         activity.getSystemService(InputMethodManager.class).hideSoftInputFromWindow(query.getWindowToken(), 0);
         activity.getWindow().setSoftInputMode(previousSoftInput);
         if (getParent() instanceof ViewGroup parent) parent.removeView(this);

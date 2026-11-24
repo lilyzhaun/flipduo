@@ -67,7 +67,7 @@ final class AppCutoutHook {
         propertyConstructor.setAccessible(true);
 
         Class<?> activity = loader.loadClass("com.android.server.wm.ActivityRecord");
-        try { galleryLayout = RustGalleryLayout.resolve(activity); }
+        try { galleryLayout = new RustGalleryLayout(activity); }
         catch (ReflectiveOperationException | RuntimeException | LinkageError error) { NativeModule.warning("Rust Gallery layout option unavailable", error); }
         Class<?> controller = loader.loadClass("com.android.server.wm.BoundsCompatController");
         Field owner = field(controller, "mOwner"), packageName = field(activity, "packageName");
@@ -150,9 +150,13 @@ final class AppCutoutHook {
                 Configuration base = displayConfiguration(record);
                 Configuration parent = (Configuration) chain.getArg(0);
                 Configuration resolved = (Configuration) getResolved.invoke(record);
-                if (cover(base) && fullscreen(resolved, parent)) {
-                    if (forced) fullAppBounds(resolved, pkg, base, snapshot.scaleFor(pkg, noCutout != null));
-                    else if (systemPercent != null) scaleSystemContent(resolved, parent, systemPercent);
+                boolean resize = (forced || systemPercent != null) && cover(base);
+                // Gallery reads the actual display's OEM screen type. Its layout is independent of model-specific pixel sizes.
+                if (base != null && (resize || gallery) && fullscreen(resolved, parent)) {
+                    if (resize) {
+                        if (forced) fullAppBounds(resolved, pkg, base, snapshot.scaleFor(pkg, noCutout != null));
+                        else scaleSystemContent(resolved, parent, systemPercent);
+                    }
                     if (gallery) {
                         Rect max = galleryLayout.apply(record, resolved, parent, base);
                         if (max != null && reportedConfigurations.add("gallery:regularLayout"))

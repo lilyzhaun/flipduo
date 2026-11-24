@@ -4,19 +4,19 @@
 
 FlipDuo is an LSPosed module and companion settings app for the cover screens of Xiaomi MIX Flip devices.
 
-This repository contains the public production source and build files for **0.7.9 (177)**. The app's existing interface text is preserved in its original language.
+This repository contains the public production source and build files for **0.7.14 (182)**. The app's existing interface text is preserved in its original language.
 
 ## Features
 
 - Configurable cover-screen navigation controls, status indicators, and notification/activity displays.
-- Three- or four-column stock cover app list, local app search beside Edit, and optional double-tap on blank space to lock.
+- Three- or four-column stock cover app list, local app search beside Edit with tap feedback and swipe-left dismissal, and optional double-tap on blank space to lock.
 - Configurable tap actions for the status indicator and clock, and independent formats for both clock lines.
 - Black or live blurred backgrounds beside supported apps.
 - Per-app fullscreen options and cover-screen recent-task customization.
 - **Hide cover-screen state:** choose the regular layout for supported Xiaomi apps, including Calendar, Contacts and Dialer, Clock, Messaging, Recorder, Calculator, and compatible Gallery versions. All choices are off by default.
 - Adjust an app's cover-screen content size from 70% to 110% while keeping its system window layout. The default is 100%; fullscreen scaling is saved separately.
 - Optional full-width notifications and framed cover-screen screenshots.
-- Native cover control-center long-press actions with compact, camera-safe detail panels.
+- Native cover Control Center actions and camera-safe landscape panels. An independent option corrects card placement after rotating back to portrait.
 - Named local appearance presets and per-user selection of an enabled cover-screen keyboard.
 - Selectable quick restart for Screenshot, Sogou Input Method for Xiaomi, FlipHome, and System UI, using root access only after confirmation.
 - Repository access and a choice of Lanzou Cloud or the latest GitHub Release from the About page.
@@ -27,11 +27,13 @@ Features depend on the device's firmware and the enabled module scopes. Fullscre
 
 The compatibility targets are MIX Flip (`ruyi`) on HyperOS 3 and MIX Flip 2 (`bixi`) on HyperOS 3 or 4. Firmware-specific behavior requires verification on the corresponding device; these targets are not a guarantee that every feature works on every firmware.
 
-For regular app layouts, select an app under **Settings → Hide cover-screen state**, grant its LSPosed scope, and reopen the app. The Rust Gallery option is a separate experiment limited to MIX Flip 2 on `OS4.0.4.0.XOHCNXM` with Gallery `5.4.3.12-1116-cn`. It uses the System Framework scope; access to the full Gallery home screen on that combination is not yet confirmed. Both this experiment and follow-system scaling require the updated module to load in System Framework after a manual device restart.
+For regular app layouts, select an app under **Settings → Hide cover-screen state**, grant its LSPosed scope, and reopen the app. The separate Rust Gallery experiment uses package metadata and the available framework interfaces rather than a list of device or Gallery versions. It is off by default, preserves window size and scaling, and does not guarantee access to the full native Gallery home screen. Java Gallery keeps its app-level scope. The Rust experiment and follow-system scaling require the updated module to load in System Framework after a manual device restart.
+
+Under **Settings → Cover screen behavior**, the optional portrait rotation fix is off by default; it does not require landscape adaptation. The landscape status-icon and clear-button positions were confirmed on MIX Flip 2 / HyperOS 4. Both HyperOS 3 targets have separate ROM-based checks, not device acceptance for these changes. Reload System UI after updating to use the panel fixes, and FlipHome for the search changes.
 
 On the first-generation MIX Flip running HyperOS 3, you can dismiss the notification list opened from the cover-screen bell and use the side controls again without opening a notification. Reload System UI after updating to load this fix.
 
-The 0.7.4 Search and Edit button appearance has user acceptance. For the new launcher integration, first-generation HyperOS 3 checks use ROM interfaces rather than device tests; MIX Flip 2 / HyperOS 3 still requires independent firmware and device verification. Live blur remains experimental and can vary by video content and firmware.
+The 0.7.4 Search and Edit button appearance has user acceptance. The newer search gestures and haptics have host and firmware checks; on-device behavior may vary. Live blur remains experimental and can vary by video content and firmware.
 
 Cover detail panels keep their native actions and scrolling, use the display's camera-safe area, and restore the main panel's opacity after returning. Reload System UI to load these changes. The cover-app eligibility switch now bypasses stale interception-cache entries while enabled; this correction has ROM and logic verification, with affected apps on other firmware still awaiting device verification. Its system-framework hooks load after a manual device restart.
 
@@ -91,12 +93,14 @@ The public source distribution does not include private signing material, test s
 
 ## Source releases
 
-For 0.7.9 (177), use the [signed APK](https://github.com/lilyzhaun/flipduo/releases/download/v0.7.9-full/flipduo-0.7.9.apk) and its [complete source tag, `v0.7.9-full`](https://github.com/lilyzhaun/flipduo/tree/v0.7.9-full). The earlier `v0.7.9` tag contains only the notification fix on top of 0.7.4. See the [release notes](https://github.com/lilyzhaun/flipduo/releases/tag/v0.7.9-full) for all changes since 0.7.4.
+For **0.7.14 (182)**, use the [complete source tag, `v0.7.14`](https://github.com/lilyzhaun/flipduo/tree/v0.7.14). See the [changelog](CHANGELOG.md#0714) for changes since 0.7.9 and [GitHub Releases](https://github.com/lilyzhaun/flipduo/releases) for published APKs.
+
+For the older 0.7.9 (177) APK, use [`v0.7.9-full`](https://github.com/lilyzhaun/flipduo/releases/tag/v0.7.9-full). The earlier `v0.7.9` tag contains only the notification fix on top of 0.7.4.
 
 Update in place to retain app settings. For ADB installation, explicitly use the non-incremental path:
 
 ```sh
-adb install --no-incremental -r flipduo-0.7.9.apk
+adb install --no-incremental -r flipduo-0.7.14.apk
 ```
 
 The public build configuration omits private instrumentation-test dependencies and local SDK paths. It contains the production sources needed to build this version, rather than a byte-for-byte reproduction of a publisher-signed APK.

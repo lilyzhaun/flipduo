@@ -23,7 +23,7 @@ internal enum class SettingsGroup(val title: String) {
             c.trioNetworkWeight, c.trioBatteryNumber, c.trioBatteryScale, c.trioBatteryWeight)
         CORNERS -> listOf(c.systemCorners, c.symmetricCorners)
         BEHAVIOR -> listOf(c.background, c.recentsCrop, c.recentsStyle, c.recentsCardLongPress, c.eventIsland, c.islandLock,
-            c.landscapeCompat, c.hideStatus, c.hideCoverCamera, c.statusBarHeight, c.notificationFullscreen, c.hideCoverBottomGuard)
+            c.landscapeCompat, c.fixControlCenterRotation, c.hideStatus, c.hideCoverCamera, c.statusBarHeight, c.notificationFullscreen, c.hideCoverBottomGuard)
         NAVIGATION -> listOf(c.backLongPress, c.homeLongPress, c.recentsLongPress, c.backLongPressApp, c.homeLongPressApp,
             c.recentsLongPressApp, c.trioTap, c.clockTap)
         FEEDBACK -> listOf(c.haptics, c.animations, c.animationMs)
@@ -57,7 +57,8 @@ internal enum class SettingsGroup(val title: String) {
         CORNERS -> target.copy(systemCorners = from.systemCorners, symmetricCorners = from.symmetricCorners)
         BEHAVIOR -> target.copy(background = from.background, recentsCrop = from.recentsCrop, recentsStyle = from.recentsStyle,
             recentsCardLongPress = from.recentsCardLongPress, eventIsland = from.eventIsland, islandLock = from.islandLock,
-            landscapeCompat = from.landscapeCompat, hideStatus = from.hideStatus, hideCoverCamera = from.hideCoverCamera,
+            landscapeCompat = from.landscapeCompat, fixControlCenterRotation = from.fixControlCenterRotation,
+            hideStatus = from.hideStatus, hideCoverCamera = from.hideCoverCamera,
             statusBarHeight = from.statusBarHeight, notificationFullscreen = from.notificationFullscreen,
             hideCoverBottomGuard = from.hideCoverBottomGuard)
         NAVIGATION -> target.copy(backLongPress = from.backLongPress, homeLongPress = from.homeLongPress,

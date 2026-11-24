@@ -21,6 +21,8 @@ public final class DockConfig {
     public boolean eventIsland = true;
     public boolean islandLock = true;
     public boolean landscapeCompat = true;
+    public static final String CONTROL_CENTER_ROTATION_FIX = "control_center_rotation_fix";
+    public boolean fixControlCenterRotation = false;
     public CoverBackground background = CoverBackground.BLACK;
     public boolean recentsCrop = true;
     public boolean symmetricCorners = false;
@@ -126,6 +128,7 @@ public final class DockConfig {
         c.eventIsland = prefs.getBoolean("event_island", true);
         c.islandLock = prefs.getBoolean("island_lock", true);
         c.landscapeCompat = prefs.getBoolean("landscape_compat", true);
+        c.fixControlCenterRotation = prefs.getBoolean(CONTROL_CENTER_ROTATION_FIX, false);
         c.background = CoverBackground.read(prefs);
         c.recentsCrop = prefs.getBoolean("recents_crop", c.background == CoverBackground.BLACK);
         c.cameraSecondRing = prefs.getBoolean("camera_second_ring", false);
