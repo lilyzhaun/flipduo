@@ -139,6 +139,8 @@ public final class NativeModule extends XposedModule {
             catch (ReflectiveOperationException | RuntimeException error) { warning("Cover notification layout unavailable; native shade retained", error); }
             try { CoverNotificationClock.install(this, param.getClassLoader()); }
             catch (ReflectiveOperationException | RuntimeException error) { warning("Cover notification clock reflow unavailable; native clock retained", error); }
+            try { CoverBellShadeReturn.install(this, param.getClassLoader()); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Cover bell return unavailable; native shade retained", error); }
             try {
                 // HyperOS 4 does not expose the AOSP SystemUIApplication class name.
                 hook(Application.class.getDeclaredMethod("attach", Context.class)).intercept(chain -> {

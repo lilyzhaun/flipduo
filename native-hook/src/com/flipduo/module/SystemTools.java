@@ -46,11 +46,17 @@ final class SystemTools {
                         Object binder = Class.forName("android.os.ServiceManager").getMethod("getService", String.class).invoke(null, "statusbar");
                         Object service = Class.forName("com.android.internal.statusbar.IStatusBarService$Stub").getMethod("asInterface", IBinder.class).invoke(null, binder);
                         Class<?> type = Class.forName("com.android.internal.statusbar.IStatusBarService");
-                        if ("notifications".equals(action)) type.getMethod("expandNotificationsPanel").invoke(service);
+                        if ("notifications".equals(action)) {
+                            CoverBellShadeReturn.requested(intent.getIntExtra("displayId", -1));
+                            type.getMethod("expandNotificationsPanel").invoke(service);
+                        }
                         else type.getMethod("expandSettingsPanel", String.class).invoke(service, (Object) null);
                     } else throw new IllegalArgumentException("Unknown tool");
                     success = true; NativeModule.info("System tool executed: " + action);
-                } catch (Exception error) { NativeModule.warning("System tool failed: " + action, error); }
+                } catch (Exception error) {
+                    if ("notifications".equals(action)) CoverBellShadeReturn.requested(-1);
+                    NativeModule.warning("System tool failed: " + action, error);
+                }
                 context.sendBroadcast(new Intent(RESULT).setPackage("com.miui.fliphome").putExtra("id", intent.getLongExtra("id", 0)).putExtra("success", success), StatusWire.PERMISSION);
             }
         }, new IntentFilter(REQUEST), StatusWire.PERMISSION, new Handler(Looper.getMainLooper()), Context.RECEIVER_EXPORTED);

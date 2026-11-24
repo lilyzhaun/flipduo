@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.7.4（172）** 的生产源码与必要构建文件，应用现有界面文案保留。
+FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置应用。本仓库提供 **0.7.9（177）** 的公开生产源码与必要构建文件，应用现有界面文案保留。
 
 ## 功能
 
@@ -22,6 +22,8 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 ## 兼容目标
 
 目标环境为初代 MIX Flip（`ruyi`）HyperOS 3，以及 MIX Flip 2（`bixi`）HyperOS 3／4。固件相关行为需要在对应设备上验证，兼容目标不代表每项功能已在所有固件上通过验收。
+
+初代 MIX Flip 的 HyperOS 3 上，从外屏铃铛打开通知列表后，直接收起即可继续使用侧边按钮，不必先点进一条通知。更新后请重载系统界面（SystemUI）以加载此修复。
 
 0.7.4 的“搜索”和“编辑”按钮外观已获用户验收。外屏桌面接入在初代 HyperOS 3 上以 ROM 接口核对为依据，MIX Flip 2／HyperOS 3 仍待独立固件及实机验证。实时模糊仍属试验功能，表现可能随视频内容和固件变化。
 
@@ -79,12 +81,12 @@ app/build/outputs/apk/release/app-release-unsigned.apk
 
 ## 对应版本源码
 
-请使用与收到的APK版本相对应的源码标签。本版本为 [`v0.7.4`](https://github.com/lilyzhaun/flipduo/tree/v0.7.4)，已签名APK见[对应Release](https://github.com/lilyzhaun/flipduo/releases/tag/v0.7.4)，此前源码标签继续保留。
+本次更新的源码标签为 [`v0.7.9`](https://github.com/lilyzhaun/flipduo/tree/v0.7.9)。已发布的签名安装包可在 [Releases](https://github.com/lilyzhaun/flipduo/releases) 查看。
 
 升级时使用覆盖安装以保留应用设置。通过ADB安装时，明确使用非增量方式：
 
 ```sh
-adb install --no-incremental -r flipduo-0.7.4.apk
+adb install --no-incremental -r flipduo-0.7.9.apk
 ```
 
 公开构建配置移除了私有仪器测试依赖和本机SDK路径，提供构建该版本所需的生产源码；它不承诺逐字节复现发布者签名后的APK。
