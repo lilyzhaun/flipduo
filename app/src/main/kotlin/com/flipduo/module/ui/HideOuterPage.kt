@@ -46,12 +46,10 @@ internal fun HideOuterPage(store: ControlsStore, controls: Controls, back: () ->
         value = withContext(Dispatchers.IO) {
             HideOuterApp.entries.map { app ->
                 try {
-                    val installed = pm.getPackageInfo(app.pkg, PackageManager.PackageInfoFlags.of(0))
-                    val info = installed.applicationInfo ?: return@map OuterRow(app, app.title, null, "无法读取应用信息")
-                    val rustGallery = app == HideOuterApp.GALLERY && !HideOuterApp.hasAppCode(info)
+                    val info = pm.getApplicationInfo(app.pkg, PackageManager.ApplicationInfoFlags.of(0))
+                    val rustGallery = RustGalleryLayout.isNativeGallery(info)
                     OuterRow(app, info.loadLabel(pm).toString(), info.loadIcon(pm).toBitmap(96, 96).asImageBitmap(), when {
                         !info.enabled -> "应用已停用"
-                        rustGallery && !RustGalleryLayout.supports(info, installed.longVersionCode) -> "此固件与相册版本尚未适配"
                         !rustGallery && !HideOuterApp.hasAppCode(info) -> "此版本使用原生运行时，不支持此选项"
                         else -> null
                     }, rustGallery)
@@ -80,7 +78,7 @@ internal fun HideOuterPage(store: ControlsStore, controls: Controls, back: () ->
                     row.rustGallery && checked && grants != null && !granted("system") -> "实验 · 待授权系统框架"
                     row.rustGallery && checked && (!policy.scalingReady || (policy.loadedVersion ?: 0) < RustGalleryLayout.POLICY_VERSION) ->
                         "实验 · 需系统框架加载新版模块；升级后手动重启手机一次"
-                    row.rustGallery -> "实验 · 调整相册首页的布局判断，保留实际窗口大小"
+                    row.rustGallery -> "实验 · 尝试在外屏显示相册普通首页；不支持时保留原布局"
                     checked && grants != null && !granted(pkg) -> "待授权"
                     else -> null
                 }

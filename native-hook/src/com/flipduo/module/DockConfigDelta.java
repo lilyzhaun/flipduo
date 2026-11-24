@@ -44,7 +44,7 @@ final class DockConfigDelta {
         // Not read by NativeDock, or only by steps applyConfig() still runs every time
         // (button visibility, appearance rebuild, timers) or read at the moment of use.
         for (String name : new String[]{"enabled", "hideFullscreenButtons", "haptics", "animations", "animationMs", "revision",
-                "hideStatus", "systemCorners", "statusBarHeight", "notificationFullscreen", "hideCoverBottomGuard", "framedScreenshots", "landscapeCompat", "background",
+                "hideStatus", "systemCorners", "statusBarHeight", "notificationFullscreen", "hideCoverBottomGuard", "framedScreenshots", "landscapeCompat", "fixControlCenterRotation", "background",
                 "recentsCrop", "symmetricCorners", "hideCoverCamera", "unrestrictCoverApps", "recentsCardLongPress",
                 "recentsStyle", "cameraSecondRing", "cameraMainRing", "cameraLowerRing", "cameraNotifications",
                 "cameraBreathing", "cameraDebugRings", "cameraMainStroke", "cameraLowerStroke", "cameraMainX", "cameraMainY",

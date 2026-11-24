@@ -92,6 +92,7 @@ internal data class Controls(
     val hideOuterApps: Set<String> = emptySet(),
     val followSystemScales: Map<String, Int> = emptyMap(),
     val rustGalleryLayout: Boolean = false,
+    val fixControlCenterRotation: Boolean = false,
 )
 
 internal val Controls.configuredDisplayApps: Set<String> get() = fullscreenApps + followSystemScales.keys
@@ -363,6 +364,7 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
             .putBoolean("event_island", c.eventIsland)
             .putBoolean("island_lock", c.islandLock)
             .putBoolean("landscape_compat", c.landscapeCompat)
+            .putBoolean(DockConfig.CONTROL_CENTER_ROTATION_FIX, c.fixControlCenterRotation)
             .putString(CoverBackground.KEY, c.background.key)
             .putBoolean("black_background", c.background == CoverBackground.BLACK)
             .putBoolean("recents_crop", c.recentsCrop)
@@ -464,6 +466,7 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
         HideOuterApp.read(p),
         followSystemScales = CutoutAppConfig.readSystemScales(p),
         rustGalleryLayout = p.getBoolean(RustGalleryLayout.KEY, false),
+        fixControlCenterRotation = p.getBoolean(DockConfig.CONTROL_CENTER_ROTATION_FIX, false),
     )
 }
 
@@ -492,6 +495,7 @@ internal fun Controls.nativeConfig() = DockConfig().also {
     it.eventIsland = eventIsland
     it.islandLock = islandLock
     it.landscapeCompat = landscapeCompat
+    it.fixControlCenterRotation = fixControlCenterRotation
     it.background = background
     it.recentsCrop = recentsCrop
     it.symmetricCorners = symmetricCorners

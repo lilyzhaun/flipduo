@@ -23,6 +23,7 @@ final class StockAppSearchHook {
     private final WeakHashMap<TextView, StockSearchFooter> footers = new WeakHashMap<>();
     private final WeakHashMap<Activity, WeakReference<StockAppSearchPanel>> panels = new WeakHashMap<>();
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final StockEditTap editTap;
 
     StockAppSearchHook(NativeModule module, ClassLoader loader) throws ReflectiveOperationException {
         Class<?> holder = loader.loadClass("com.miui.fliphome.adapter.FlipLauncherAdapter$EditViewHolder");
@@ -32,14 +33,15 @@ final class StockAppSearchHook {
         Method bind = holder.getDeclaredMethod("bindItem", shortcut, boolean.class);
         Method back = launcher.getDeclaredMethod("onBackPressed"), pause = launcher.getDeclaredMethod("onPause");
         Method configuration = launcher.getDeclaredMethod("onConfigurationChanged", Configuration.class);
+        editTap = StockEditTap.resolve(holder, loader);
         module.hook(bind).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
-            Object result = chain.proceed(); TextView text = (TextView) edit.get(chain.getThisObject());
+            Object result = chain.proceed(); Object boundHolder = chain.getThisObject(); TextView text = (TextView) edit.get(boundHolder);
             if (text != null && (text.getParent() instanceof FrameLayout || footers.containsKey(text))) {
-                StockSearchFooter footer = footers.computeIfAbsent(text, StockSearchFooter::new);
-                WeakReference<TextView> source = new WeakReference<>(text);
-                footer.apply(NativeModule.config().desktopSearchEnabled(), () -> {
-                    TextView view = source.get(); if (view != null) open(view);
+                StockSearchFooter footer = footers.computeIfAbsent(text, v -> {
+                    WeakReference<Object> owner = new WeakReference<>(boundHolder);
+                    return new StockSearchFooter(v, source -> open(source, owner.get()));
                 });
+                footer.apply(NativeModule.config().desktopSearchEnabled());
             }
             return result;
         });
@@ -55,12 +57,13 @@ final class StockAppSearchHook {
         instance = this; NativeLog.info("Stock FlipHome local app search installed; native edit action retained");
     }
 
-    private void open(View source) {
+    private void open(View source, Object holder) {
         Activity activity = activity(source.getContext());
         if (activity == null || !source.isShown() || !StockAppSearchPanel.eligible(activity)) return;
         WeakReference<StockAppSearchPanel> previous = panels.get(activity);
         if (previous != null && previous.get() != null) return;
         if (!(activity.findViewById(android.R.id.content) instanceof FrameLayout root)) return;
+        StockEditTap.play(editTap, holder, source, NativeModule.config().haptics);
         StockAppSearchPanel panel = new StockAppSearchPanel(activity, () -> panels.remove(activity));
         panels.put(activity, new WeakReference<>(panel)); panel.show(root);
     }
@@ -76,10 +79,7 @@ final class StockAppSearchHook {
         hook.main.post(() -> {
             boolean enabled = NativeModule.config().desktopSearchEnabled();
             if (!enabled) for (Activity activity : new ArrayList<>(hook.panels.keySet())) hook.close(activity);
-            for (TextView text : new ArrayList<>(hook.footers.keySet())) {
-                WeakReference<TextView> source = new WeakReference<>(text);
-                hook.footers.get(text).apply(enabled, () -> { TextView view = source.get(); if (view != null) hook.open(view); });
-            }
+            for (StockSearchFooter footer : new ArrayList<>(hook.footers.values())) footer.apply(enabled);
         });
     }
 

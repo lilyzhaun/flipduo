@@ -6,26 +6,29 @@ import android.graphics.drawable.Drawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.TouchDelegate;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.lang.ref.WeakReference;
+import java.util.function.Consumer;
 
 /** Wraps only the native edit TextView; its ID and click listener are never replaced. */
 final class StockSearchFooter {
     private final WeakReference<TextView> edit;
+    private final Consumer<View> open;
     private final FrameLayout.LayoutParams original;
     private final int originalDescendantFocus;
     private WeakReference<LinearLayout> row = new WeakReference<>(null);
 
-    StockSearchFooter(TextView edit) {
-        this.edit = new WeakReference<>(edit);
+    StockSearchFooter(TextView edit, Consumer<View> open) {
+        this.edit = new WeakReference<>(edit); this.open = open;
         original = new FrameLayout.LayoutParams((FrameLayout.LayoutParams) edit.getLayoutParams());
         originalDescendantFocus = ((FrameLayout) edit.getParent()).getDescendantFocusability();
     }
 
-    void apply(boolean enabled, Runnable open) {
+    void apply(boolean enabled) {
         TextView nativeEdit = edit.get(); if (nativeEdit == null) return;
         LinearLayout group = row.get();
         if (!enabled) {
@@ -43,7 +46,7 @@ final class StockSearchFooter {
             TextView search = new TextView(nativeEdit.getContext());
             search.setText("搜索"); search.setContentDescription("搜索并打开本机应用");
             search.setGravity(nativeEdit.getGravity()); search.setIncludeFontPadding(nativeEdit.getIncludeFontPadding());
-            search.setFocusable(true); search.setClickable(true); search.setOnClickListener(v -> open.run());
+            search.setFocusable(true); search.setClickable(true); search.setOnClickListener(open::accept);
             parent.removeView(nativeEdit);
             addSlot(group, search, 0); addSlot(group, nativeEdit, dp(nativeEdit, 8));
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
