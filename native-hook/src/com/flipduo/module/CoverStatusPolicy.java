@@ -16,7 +16,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.WeakHashMap;
 
-/** Suppresses only status-bar drawing. Native visibility, input, window flags and inset sources stay intact. */
+/** Hides cover status-bar drawing and limits its native window height without replacing the window or its input. */
 final class CoverStatusPolicy {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final ArrayList<Entry> ENTRIES = new ArrayList<>();
@@ -44,14 +44,27 @@ final class CoverStatusPolicy {
         Class<?> bars = Class.forName("com.android.internal.policy.SystemBarUtils");
         for (Method method : bars.getDeclaredMethods()) {
             if (!method.getName().equals("getStatusBarHeight") && !method.getName().equals("getStatusBarHeightForRotation")) continue;
-            if (method.getParameterTypes().length == 0 || method.getParameterTypes()[0] != Context.class) continue;
+            Class<?>[] types = method.getParameterTypes();
+            if (types.length == 0 || types[0] != Context.class) continue;
+            boolean currentDisplayHeight = method.getName().equals("getStatusBarHeight") && types.length == 1;
+            boolean rotationHeight = method.getName().equals("getStatusBarHeightForRotation")
+                    && types.length == 2 && types[1] == int.class;
             module.hook(method).intercept(chain -> {
                 int nativeHeight = (Integer) chain.proceed();
                 Context c = (Context) chain.getArg(0);
-                // NotificationHeaderExpandController also queries this helper. Only the status
-                // window may consume the compressed height; shade/header/control-center keep native geometry.
-                return WINDOW_HEIGHT.get() && shouldHide(c.getDisplay())
-                        ? Math.min(nativeHeight, NativeModule.config().statusBarHeight) : nativeHeight;
+                // Other callers (such as the notification header) must still get native height.
+                boolean hide = WINDOW_HEIGHT.get() && shouldHide(c.getDisplay());
+                int height = hide ? Math.min(nativeHeight, NativeModule.config().statusBarHeight) : nativeHeight;
+                if ((currentDisplayHeight || rotationHeight) && WINDOW_HEIGHT.get()) {
+                    Display display = c.getDisplay();
+                    if (display != null) {
+                        int rotation = display.getRotation();
+                        // apply() updates inset sources for every rotation; only take the current one.
+                        if (currentDisplayHeight || (Integer) chain.getArg(1) == rotation)
+                            CoverControlCenterDetail.setCompressedStatusTop(display.getDisplayId(), rotation, hide ? height : -1);
+                    }
+                }
+                return height;
             });
         }
         Class<?> controller = loader.loadClass("com.android.systemui.statusbar.window.StatusBarWindowControllerImpl");
@@ -124,14 +137,20 @@ final class CoverStatusPolicy {
     }
 
     static void start(Context app) {
-        context = app;
-        app.getSystemService(DisplayManager.class).registerDisplayListener(new DisplayManager.DisplayListener() {
-            public void onDisplayAdded(int id) { refresh(); }
-            public void onDisplayRemoved(int id) { refresh(); }
-            public void onDisplayChanged(int id) { refresh(); }
-        }, MAIN);
         IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_USER_PRESENT);
-        app.registerReceiver(new BroadcastReceiver() { public void onReceive(Context c, Intent i) { refresh(); } }, filter, Context.RECEIVER_NOT_EXPORTED);
+        BroadcastReceiver lifecycle = new BroadcastReceiver() { public void onReceive(Context c, Intent i) { refresh(); } };
+        app.registerReceiver(lifecycle, filter, Context.RECEIVER_NOT_EXPORTED);
+        try {
+            app.getSystemService(DisplayManager.class).registerDisplayListener(new DisplayManager.DisplayListener() {
+                public void onDisplayAdded(int id) { refresh(); }
+                public void onDisplayRemoved(int id) { CoverControlCenterDetail.clearCompressedStatusTop(id); refresh(); }
+                public void onDisplayChanged(int id) { refresh(); }
+            }, MAIN);
+        } catch (RuntimeException | LinkageError error) {
+            app.unregisterReceiver(lifecycle);
+            throw error;
+        }
+        context = app; // A partial start cannot claim the SystemUI reporting path.
         refresh();
     }
     private static Entry find(View v) { for (Entry e : ENTRIES) if (e.root.get() == v) return e; return null; }

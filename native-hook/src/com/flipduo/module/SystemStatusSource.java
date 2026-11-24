@@ -63,17 +63,25 @@ final class SystemStatusSource {
         if (Looper.myLooper() != Looper.getMainLooper()) { STARTUP.post(() -> start(context)); return; }
         if (instance != null || starting || attempts >= 3) return;
         starting = true; attempts++;
-        SystemStatusSource candidate = new SystemStatusSource(context);
+        SystemStatusSource candidate = null;
         try {
+            candidate = new SystemStatusSource(context);
             candidate.listen();
-            instance = candidate; // Publish only a completely registered source.
-            starting = false;
         } catch (RuntimeException | LinkageError error) {
-            candidate.close();
+            if (candidate != null) candidate.close();
             NativeModule.warning("Status registration failed, attempt " + attempts + "/3; partial listeners removed", error);
             if (attempts < 3) STARTUP.postDelayed(() -> { starting = false; start(context); }, attempts * 1500L);
-            else starting = false;
+            else {
+                starting = false;
+                HostCapabilities.startFailed("status_source");
+                RuntimeReport.applied(context, "systemui", NativeModule.config());
+            }
+            return;
         }
+        instance = candidate; // Publish only a completely registered source.
+        starting = false;
+        HostCapabilities.started("status_source");
+        if (attempts > 1) RuntimeReport.applied(context, "systemui", NativeModule.config());
     }
     private SystemStatusSource(Context context) {
         this.context = context;

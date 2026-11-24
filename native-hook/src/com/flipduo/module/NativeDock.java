@@ -8,6 +8,8 @@ import android.app.ActivityOptions;
 import android.graphics.*;
 import android.net.wifi.WifiManager;
 import android.os.*;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.view.*;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -73,6 +75,8 @@ final class NativeDock extends ViewGroup {
         }
     };
     private final AccessibilityManager.AccessibilityStateChangeListener accessibilityChanges = on -> updateTimers();
+    private AccessibilityManager hostAccessibility;
+    private final ArrayList<BroadcastReceiver> hostReceivers = new ArrayList<>(5);
     private final DockIcons icons = new DockIcons();
     private final Header header;
     private TrioState state = new TrioState();
@@ -280,7 +284,11 @@ final class NativeDock extends ViewGroup {
     boolean eventHostEligible() { return config.eventIsland && enabled && (miniSlotted || isShown()); }
     void suspendEventHost() {
         // The same native window may reattach during recents while the task still occupies our slot.
-        if (eventHosting && !miniSlotted) { eventRequest("release"); eventHosting = false; }
+        if (eventHosting && !miniSlotted) {
+            eventHosting = false;
+            try { eventRequest("release"); }
+            catch (SecurityException error) { NativeLog.warning("Cannot release the native event host channel", error); }
+        }
         eventFramePending = 0;
     }
     private void confirmEventFrame() {
@@ -643,7 +651,11 @@ final class NativeDock extends ViewGroup {
         if (!previewOnly) return;
         layout = value; layoutOverridden = true; appearance.layout(layout); requestLayout(); invalidate();
     }
-    void refreshPreviewClock() { header.updateDescription(); header.invalidate(); }
+    void refreshPreviewClock() {
+        TimeZone zone = TimeZone.getDefault();
+        if (!clock.getTimeZone().equals(zone)) applyTimeZone(zone);
+        header.updateDescription(); header.invalidate();
+    }
 
     @Override protected void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration); applyAppearance(bottomControls);
@@ -742,28 +754,45 @@ final class NativeDock extends ViewGroup {
     }
 
     @Override protected void onAttachedToWindow() {
-        super.onAttachedToWindow(); rebuildAppearance(); attached = true;
-        clearToolWait(); menu = false; menuProgress = 0; updateMenu(); applyAppearance(bottomControls);
-        applyMenuMotion();
-        if (previewOnly) return;
-        getContext().registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        IntentFilter statusFilter = new IntentFilter(StatusWire.ACTION); statusFilter.addAction(StatusWire.TINT);
-        getContext().registerReceiver(systemStatus, statusFilter, StatusWire.PERMISSION, handler, Context.RECEIVER_EXPORTED);
-        getContext().registerReceiver(toolResults, new IntentFilter(SystemTools.RESULT), StatusWire.PERMISSION, handler, Context.RECEIVER_EXPORTED);
-        getContext().registerReceiver(events, new IntentFilter(EventWire.STATE), StatusWire.PERMISSION, handler, Context.RECEIVER_EXPORTED);
-        getContext().sendBroadcast(new Intent(StatusWire.REQUEST).setPackage("com.android.systemui"), StatusWire.PERMISSION);
-        if (eventHosting) {
-            eventAcknowledged = 0; eventFramePending = 0; eventRequest("host");
-        } else updateEventHost();
-        settleButtonPresence();
-        applyTimeZone(TimeZone.getDefault()); // a re-attached instance may have missed a zone change
-        IntentFilter time = new IntentFilter(Intent.ACTION_TIME_CHANGED); time.addAction(Intent.ACTION_TIMEZONE_CHANGED);
-        getContext().registerReceiver(timeChanges, time, null, handler, Context.RECEIVER_NOT_EXPORTED);
-        AccessibilityManager accessibility = getContext().getSystemService(AccessibilityManager.class);
-        if (accessibility != null) accessibility.addAccessibilityStateChangeListener(accessibilityChanges, handler);
-        Display display = getDisplay();
-        screenOn = display == null || display.getState() != Display.STATE_OFF;
-        updateTimers();
+        super.onAttachedToWindow();
+        try {
+            rebuildAppearance(); attached = true;
+            clearToolWait(); menu = false; menuProgress = 0; updateMenu(); applyAppearance(bottomControls);
+            applyMenuMotion();
+            if (previewOnly) return;
+            getContext().registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            hostReceivers.add(batteryReceiver);
+            IntentFilter statusFilter = new IntentFilter(StatusWire.ACTION); statusFilter.addAction(StatusWire.TINT);
+            registerHostReceiver(systemStatus, statusFilter, StatusWire.PERMISSION, Context.RECEIVER_EXPORTED);
+            registerHostReceiver(toolResults, new IntentFilter(SystemTools.RESULT), StatusWire.PERMISSION, Context.RECEIVER_EXPORTED);
+            registerHostReceiver(events, new IntentFilter(EventWire.STATE), StatusWire.PERMISSION, Context.RECEIVER_EXPORTED);
+            applyTimeZone(TimeZone.getDefault()); // a re-attached instance may have missed a zone change
+            IntentFilter time = new IntentFilter(Intent.ACTION_TIME_CHANGED); time.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+            registerHostReceiver(timeChanges, time, null, Context.RECEIVER_NOT_EXPORTED);
+            AccessibilityManager accessibility = getContext().getSystemService(AccessibilityManager.class);
+            if (accessibility != null) {
+                accessibility.addAccessibilityStateChangeListener(accessibilityChanges, handler); hostAccessibility = accessibility;
+            }
+            getContext().sendBroadcast(new Intent(StatusWire.REQUEST).setPackage("com.android.systemui"), StatusWire.PERMISSION);
+            if (eventHosting) {
+                eventAcknowledged = 0; eventFramePending = 0; eventRequest("host");
+            } else updateEventHost();
+            settleButtonPresence();
+            Display display = getDisplay();
+            screenOn = display == null || display.getState() != Display.STATE_OFF;
+            updateTimers();
+        } catch (RuntimeException | LinkageError error) {
+            if (previewOnly) throw error;
+            // A child may attach during the native ViewRoot traversal, outside mount(). Disable it
+            // now; the root's existing attach callback will restore the original pager and window.
+            enabled = false;
+            NativeLog.warning("Cannot attach native controls; restoring stock presentation", error);
+        }
+    }
+
+    private void registerHostReceiver(BroadcastReceiver receiver, IntentFilter filter, String permission, int flags) {
+        getContext().registerReceiver(receiver, filter, permission, handler, flags);
+        hostReceivers.add(receiver);
     }
 
     @Override protected void onDetachedFromWindow() {
@@ -775,10 +804,11 @@ final class NativeDock extends ViewGroup {
         attached = false; clearToolWait(); handler.removeCallbacksAndMessages(null);
         updateTimers(); // detached: both drivers stop and forget their (already removed) callbacks
         if (menuAnimator != null) menuAnimator.cancel();
-        if (!previewOnly) { getContext().unregisterReceiver(batteryReceiver); getContext().unregisterReceiver(systemStatus); getContext().unregisterReceiver(toolResults); getContext().unregisterReceiver(events);
-            getContext().unregisterReceiver(timeChanges);
-            AccessibilityManager accessibility = getContext().getSystemService(AccessibilityManager.class);
-            if (accessibility != null) accessibility.removeAccessibilityStateChangeListener(accessibilityChanges); }
+        for (BroadcastReceiver receiver : hostReceivers) getContext().unregisterReceiver(receiver);
+        hostReceivers.clear();
+        if (hostAccessibility != null) {
+            hostAccessibility.removeAccessibilityStateChangeListener(accessibilityChanges); hostAccessibility = null;
+        }
         super.onDetachedFromWindow();
     }
 
@@ -971,9 +1001,10 @@ final class NativeDock extends ViewGroup {
 
     private final class Header extends android.widget.FrameLayout {
         private final TrioPainter trio = new TrioPainter();
-        private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final View trioTarget, clockTarget;
         private final Rect trioBounds = new Rect(), clockBounds = new Rect();
+        private final Rect clockInk = new Rect();
         Header(Context context) {
             super(context); setWillNotDraw(false); setImportantForAccessibility(previewOnly ? IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS : IMPORTANT_FOR_ACCESSIBILITY_YES);
             trioTarget = target(true); clockTarget = target(false);
@@ -1043,17 +1074,12 @@ final class NativeDock extends ViewGroup {
                 c.save(); c.translate(112, 78); float s = config.statusScale / 100f;
                 c.scale(s, s); c.translate(-60, -60); trio.draw(c, state, ink); c.restore();
             }
-            if (!config.showClock) { c.restore(); return; }
-            float fontScale = getResources().getConfiguration().fontScale;
-            text.setColor(ink); text.setTextSize(52 * fontScale);
-            String time = clock.format(new Date());
-            float width = text.measureText(time); if (width > 156) text.setTextSize(text.getTextSize() * 156 / width);
-            c.drawText(time, 270, 78, text);
-            text.setColor(headerSecondary(ink));
-            text.setTextSize(36 * fontScale);
-            String weekday = day.format(new Date()); float weekdayWidth = text.measureText(weekday);
-            if (weekdayWidth > 166) text.setTextSize(text.getTextSize() * 166 / weekdayWidth);
-            c.drawText(weekday, 270, 124, text); c.restore();
+            if (config.showClock) {
+                Date now = new Date();
+                drawClockLine(c, clock.format(now), ink, 270, 78, 156, 12, 90, 52);
+                drawClockLine(c, day.format(now), headerSecondary(ink), 270, 124, 166, 92, 152, 36);
+            }
+            c.restore();
         }
         private void drawLandscape(Canvas c) {
             c.save();
@@ -1066,17 +1092,29 @@ final class NativeDock extends ViewGroup {
                 c.scale(s, s); c.translate(-60, -60); trio.draw(c, state, ink); c.restore();
             }
             if (config.showClock) {
-                float fs = getResources().getConfiguration().fontScale;
-                text.setColor(ink); text.setTextSize(44 * fs);
-                String time = clock.format(new Date()); float width = text.measureText(time);
-                if (width > 140) text.setTextSize(text.getTextSize() * 140 / width);
-                c.drawText(time, 78, 234, text);
-                text.setColor(headerSecondary(ink)); text.setTextSize(32 * fs);
-                String weekday = day.format(new Date()); width = text.measureText(weekday);
-                if (width > 140) text.setTextSize(text.getTextSize() * 140 / width);
-                c.drawText(weekday, 78, 282, text);
+                Date now = new Date();
+                drawClockLine(c, clock.format(now), ink, 78, 234, 140, 184, 248, 44);
+                drawClockLine(c, day.format(now), headerSecondary(ink), 78, 282, 140, 250, 306, 32);
             }
             c.restore();
+        }
+
+        private void drawClockLine(Canvas canvas, String value, int ink, float x, float baseline,
+                                   float width, float top, float bottom, float nominalSize) {
+            text.setColor(ink);
+            float size = nominalSize * getResources().getConfiguration().fontScale;
+            text.setTextSize(size);
+            text.getTextBounds(value, 0, value.length(), clockInk);
+            if (clockInk.top < 0) size = Math.min(size, text.getTextSize() * (baseline - top - 1) / -clockInk.top);
+            if (clockInk.bottom > 0) size = Math.min(size, text.getTextSize() * (bottom - baseline - 1) / clockInk.bottom);
+            text.setTextSize(size);
+            float advance = text.measureText(value);
+            if (advance > width) {
+                // Keep long formats readable instead of shrinking an entire string to a few pixels.
+                text.setTextSize(Math.max(Math.min(size, nominalSize * .7f), size * width / advance));
+                value = TextUtils.ellipsize(value, text, width, TextUtils.TruncateAt.END).toString();
+            }
+            canvas.drawText(value, x, baseline, text);
         }
     }
 

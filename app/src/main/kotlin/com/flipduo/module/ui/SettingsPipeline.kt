@@ -47,9 +47,11 @@ class SettingsPipeline<T : Any>(
 
     /** UI thread: the edit is visible immediately; persistence follows on the serial writer. */
     fun submit(value: T) {
-        latest = value
         // A new edit is one fresh attempt for both steps; failures still stop the loop afterwards.
-        change { it.copy(latest = revisionOf(value), localFailed = false, remoteFailed = false) }
+        change {
+            latest = value
+            it.copy(latest = revisionOf(value), localFailed = false, remoteFailed = false)
+        }
         kick()
     }
 
@@ -100,9 +102,10 @@ class SettingsPipeline<T : Any>(
             val snapshot = status
             if (write == null || snapshot.delivered == rev || snapshot.remoteFailed) return
             val ok = try { write(stored); true } catch (_: Exception) { false }
-            // A result from an older framework connection is dropped, never reported as delivered.
+            // An old connection cannot report delivery. Within one connection a late failure only
+            // belongs to its own revision; it must not prevent the latest edit from being attempted.
             val stale = synchronized(lock) {
-                if (gen != generation) true
+                if (gen != generation || (!ok && current.latest != rev)) true
                 else { current = current.copy(delivered = if (ok) rev else current.delivered, remoteFailed = !ok); onStatus(current); false }
             }
             if (!ok && !stale) return

@@ -50,7 +50,8 @@ final class DockConfigDelta {
                 "cameraBreathing", "cameraDebugRings", "cameraMainStroke", "cameraLowerStroke", "cameraMainX", "cameraMainY",
                 "cameraLowerX", "cameraLowerY", "cameraMainRadius", "cameraLowerRadius", "cameraTimerColor",
                 "cameraProgressColor", "cameraChargeColor", "cameraTimerBreathColor", "cameraNotificationColor",
-                "cameraChargeTarget", "cameraChargeTargetPercent", "cameraChargeArrival", "desktopColumns", "showDesktopSearch", "desktopDoubleTapLock"}) CATEGORY.put(name, 0);
+                "cameraChargeTarget", "cameraChargeTargetPercent", "cameraChargeArrival", "desktopColumns", "showDesktopSearch", "desktopDoubleTapLock",
+                "coverInputMethod", "coverInputMethodUser"}) CATEGORY.put(name, 0);
     }
 
     private DockConfigDelta() {}

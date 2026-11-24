@@ -11,6 +11,8 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 - 三合一与时钟的点按动作可分别设置，双行时钟支持自定义格式和预览。
 - 支持应用旁侧的纯黑或实时模糊背景。
 - 按应用设置全屏，以及自定义外屏最近任务。
+- 「隐藏外屏状态」可为日历、通讯录与拨号、时钟、短信、录音机、计算器和兼容版本的相册选择普通布局，默认全关。
+- 「跟随系统」也可按应用调整外屏内容大小（70%–110%）；100% 是系统原大小，与全屏模式的缩放分别保存。
 - 可选通知全宽与带壳外屏截图。
 - 外屏控制中心原生长按操作，以及紧凑、避让镜头的详情面板。
 - 可命名的本机外观方案，以及按Android用户选择已启用的外屏输入法。
@@ -22,6 +24,8 @@ FlipDuo 是面向小米 MIX Flip 系列外屏的 LSPosed 模块及配套设置�
 ## 兼容目标
 
 目标环境为初代 MIX Flip（`ruyi`）HyperOS 3，以及 MIX Flip 2（`bixi`）HyperOS 3／4。固件相关行为需要在对应设备上验证，兼容目标不代表每项功能已在所有固件上通过验收。
+
+在「设置 → 隐藏外屏状态」选中应用，授权对应的 LSPosed 作用域，再重新打开应用。Rust 相册使用单独的实验开关，仅适用于二代 `OS4.0.4.0.XOHCNXM` 搭配相册 `5.4.3.12-1116-cn`，普通首页能否完整显示仍待实机确认。该实验与「跟随系统」缩放都需要系统框架加载新版模块，升级后请手动重启手机再使用。
 
 初代 MIX Flip 的 HyperOS 3 上，从外屏铃铛打开通知列表后，直接收起即可继续使用侧边按钮，不必先点进一条通知。更新后请重载系统界面（SystemUI）以加载此修复。
 
@@ -81,7 +85,7 @@ app/build/outputs/apk/release/app-release-unsigned.apk
 
 ## 对应版本源码
 
-本次更新的源码标签为 [`v0.7.9`](https://github.com/lilyzhaun/flipduo/tree/v0.7.9)。已发布的签名安装包可在 [Releases](https://github.com/lilyzhaun/flipduo/releases) 查看。
+0.7.9（177）的[签名 APK](https://github.com/lilyzhaun/flipduo/releases/download/v0.7.9-full/flipduo-0.7.9.apk) 对应[完整源码标签 `v0.7.9-full`](https://github.com/lilyzhaun/flipduo/tree/v0.7.9-full)。较早的 `v0.7.9` 标签只包含在 0.7.4 上补入的通知修复。从 0.7.4 起的全部更新见[版本说明](https://github.com/lilyzhaun/flipduo/releases/tag/v0.7.9-full)。
 
 升级时使用覆盖安装以保留应用设置。通过ADB安装时，明确使用非增量方式：
 

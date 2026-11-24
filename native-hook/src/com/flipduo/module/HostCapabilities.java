@@ -4,6 +4,8 @@ package com.flipduo.module;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * Per-process capability ladder carried by the settings receipt.
@@ -47,6 +49,16 @@ public final class HostCapabilities {
     static synchronized void started(String id) {
         Integer level = LEVELS.get(id);
         if (level == null || level == SUPPORTED) LEVELS.put(id, READY);
+    }
+
+    /** The ability must report successful startup; one OEM registration failure cannot skip its peers. */
+    static void start(String id, BooleanSupplier action, Consumer<Throwable> onError) {
+        try {
+            if (action.getAsBoolean()) started(id); else startFailed(id);
+        } catch (RuntimeException | LinkageError error) {
+            startFailed(id);
+            onError.accept(error);
+        }
     }
 
     /** Start threw or did not run; an already-ready capability is not downgraded. */

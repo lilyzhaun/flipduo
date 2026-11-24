@@ -16,6 +16,7 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BooleanSupplier;
 
 /** Injects children into Xiaomi's existing widget window. Never creates a window. */
 public final class NativeModule extends XposedModule {
@@ -87,6 +88,14 @@ public final class NativeModule extends XposedModule {
 
     @Override public void onPackageReady(PackageReadyParam param) {
         NativeLog.writer = (message, error) -> log(error == null ? Log.INFO : Log.WARN, TAG, message, error);
+        HideOuterApp outerApp = HideOuterApp.find(param.getPackageName());
+        if (outerApp != null) {
+            if (param.isFirstPackage() && HideOuterApp.hasAppCode(param.getApplicationInfo())) {
+                try { new HideOuterHook(outerApp).install(this, param.getClassLoader(), getRemotePreferences(DockConfig.GROUP)); }
+                catch (RuntimeException | LinkageError error) { warning("App layout settings unavailable; using stock layout", error); }
+            }
+            return;
+        }
         if (param.isFirstPackage() && ("com.miui.fliphome".equals(param.getPackageName()) || "com.android.systemui".equals(param.getPackageName())
                 || "com.miui.screenshot".equals(param.getPackageName()) || SogouImeCutout.PACKAGE.equals(param.getPackageName()))) {
             try {
@@ -122,23 +131,23 @@ public final class NativeModule extends XposedModule {
         if (param.isFirstPackage() && "com.android.systemui".equals(param.getPackageName())) {
             // Receipt capability levels only record what happened; they never change install order or fallbacks.
             try { BlurFillSource.install(this, param.getClassLoader()); HostCapabilities.installed("blur_source", true); }
-            catch (ReflectiveOperationException error) { HostCapabilities.installed("blur_source", false); warning("Live blur-fill unavailable; native controls retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { HostCapabilities.installed("blur_source", false); warning("Live blur-fill unavailable; native controls retained", error); }
             try { CoverCameraShortcutPolicy.install(this, param.getClassLoader()); HostCapabilities.installed("camera_shortcut", true); HostCapabilities.started("camera_shortcut"); }
-            catch (ReflectiveOperationException error) { HostCapabilities.installed("camera_shortcut", false); warning("Cover camera shortcut policy unavailable; native shortcut retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { HostCapabilities.installed("camera_shortcut", false); warning("Cover camera shortcut policy unavailable; native shortcut retained", error); }
             try { ControlCenterLandscape.install(this, param.getClassLoader()); HostCapabilities.installed("control_center", true); HostCapabilities.started("control_center"); }
-            catch (ReflectiveOperationException error) { HostCapabilities.installed("control_center", false); warning("Cover control-center adaptation unavailable; native panel retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { HostCapabilities.installed("control_center", false); warning("Cover control-center adaptation unavailable; native panel retained", error); }
             try { CameraStatusSource.install(this, param.getClassLoader()); HostCapabilities.installed("camera_status", true); }
-            catch (ReflectiveOperationException error) { HostCapabilities.installed("camera_status", false); warning("Camera icon binding callbacks unavailable; collection snapshots retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { HostCapabilities.installed("camera_status", false); warning("Camera icon binding callbacks unavailable; collection snapshots retained", error); }
             try { FocusEventBridge.install(this, param.getClassLoader()); HostCapabilities.installed("event_bridge", true); }
-            catch (ReflectiveOperationException error) { HostCapabilities.installed("event_bridge", false); warning("Native focus integration unavailable; original reminders retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { HostCapabilities.installed("event_bridge", false); warning("Native focus integration unavailable; original reminders retained", error); }
             try { MiniWindowBridge.install(this, param.getClassLoader()); HostCapabilities.installed("mini_window", true); HostCapabilities.started("mini_window"); }
-            catch (ReflectiveOperationException error) { HostCapabilities.installed("mini_window", false); warning("Native mini window slot unavailable; long-pressed recents is ignored", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { HostCapabilities.installed("mini_window", false); warning("Native mini window slot unavailable; long-pressed recents is ignored", error); }
             try { CoverStatusPolicy.install(this, param.getClassLoader()); HostCapabilities.installed("status_bar", true); }
             catch (Throwable error) { HostCapabilities.installed("status_bar", false); warning("Cover statusbar policy unavailable; status source and tools kept", error); }
             try { CoverNotificationLayout.install(this, param.getClassLoader()); }
-            catch (ReflectiveOperationException | RuntimeException error) { warning("Cover notification layout unavailable; native shade retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Cover notification layout unavailable; native shade retained", error); }
             try { CoverNotificationClock.install(this, param.getClassLoader()); }
-            catch (ReflectiveOperationException | RuntimeException error) { warning("Cover notification clock reflow unavailable; native clock retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Cover notification clock reflow unavailable; native clock retained", error); }
             try { CoverBellShadeReturn.install(this, param.getClassLoader()); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Cover bell return unavailable; native shade retained", error); }
             try {
@@ -149,24 +158,17 @@ public final class NativeModule extends XposedModule {
                     if (!"com.android.systemui".equals(application.getPackageName())) return result;
                     // Run after handleBindApplication finishes onCreate, independent of the OEM Application class or Instrumentation.
                     new Handler(Looper.getMainLooper()).post(() -> {
-                        try { BlurFillSource.start(application); HostCapabilities.started("blur_source"); }
-                        catch (RuntimeException error) { HostCapabilities.startFailed("blur_source"); warning("Live blur-fill startup failed; other sources retained", error); }
-                        try { SystemStatusSource.start(application); HostCapabilities.started("status_source"); }
-                        catch (Throwable error) { HostCapabilities.startFailed("status_source"); log(Log.ERROR, TAG, "SystemUI status source failed", error); }
-                         try {
-                             SystemTools.start(application); HostCapabilities.started("tools");
-                             CoverStatusPolicy.start(application); HostCapabilities.started("status_bar");
-                             FocusEventBridge.start(application); HostCapabilities.started("event_bridge");
-                         } catch (Throwable error) {
-                             // Same grouped start as before; the receipt now shows which part did not initialise.
-                             for (String id : new String[]{"tools", "status_bar", "event_bridge"}) HostCapabilities.startFailed(id);
-                             log(Log.ERROR, TAG, "SystemUI tool startup failed", error);
-                         }
-                         try { CameraStatusSource.start(application); HostCapabilities.started("camera_status"); }
-                         catch (RuntimeException error) { HostCapabilities.startFailed("camera_status"); warning("Camera status startup failed; existing controls retained", error); }
-                         systemUiApp = application;
-                         // CoverStatusPolicy normally sends the receipt; without it, still report so optional failures are visible.
-                         reportSystemUiFallback();
+                        startSystemUi("blur_source", () -> { BlurFillSource.start(application); return true; });
+                        // The status source retries on its own handler; it reports readiness only after registration.
+                        try { SystemStatusSource.start(application); }
+                        catch (RuntimeException | LinkageError error) { HostCapabilities.startFailed("status_source"); warning("SystemUI status source startup failed", error); }
+                        startSystemUi("tools", () -> { SystemTools.start(application); return true; });
+                        startSystemUi("status_bar", () -> { CoverStatusPolicy.start(application); return true; });
+                        startSystemUi("event_bridge", () -> FocusEventBridge.start(application));
+                        startSystemUi("camera_status", () -> { CameraStatusSource.start(application); return true; });
+                        systemUiApp = application;
+                        // CoverStatusPolicy normally sends the receipt; without it, still report so optional failures are visible.
+                        reportSystemUiFallback();
                     });
                     return result;
                 });
@@ -206,9 +208,9 @@ public final class NativeModule extends XposedModule {
             Method enterPower = owner.getDeclaredMethod("enterPowerMode");
             Method exitPower = owner.getDeclaredMethod("exitPowerMode");
             try { widgetStyle = new StockWidgetStyle(cl); HostCapabilities.installed("widgets", true); HostCapabilities.started("widgets"); }
-            catch (ReflectiveOperationException error) { HostCapabilities.installed("widgets", false); warning("Native widget palette unavailable; widget entry disabled, controls retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { HostCapabilities.installed("widgets", false); warning("Native widget palette unavailable; widget entry disabled, controls retained", error); }
             try { cornerHandoff = new RecentsAppAnimation(this, cl, refreshScenes); HostCapabilities.installed("recents_corners", true); HostCapabilities.started("recents_corners"); }
-            catch (ReflectiveOperationException error) { HostCapabilities.installed("recents_corners", false); warning("Task corner handoff unavailable; native transition retained", error); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { HostCapabilities.installed("recents_corners", false); warning("Task corner handoff unavailable; native transition retained", error); }
             // refreshViews explicitly makes the stock pager visible again when widget data changes.
             // Retain the data/model, but keep its presentation suppressed while our controls own this root.
             hook(widgetManager.getDeclaredMethod("refreshViews", List.class)).intercept(chain -> {
@@ -287,7 +289,7 @@ public final class NativeModule extends XposedModule {
                 viewBlur.setAccessible(true);
                 hook(supportBlur).intercept(chain -> WIDGET_NO_BLUR.get() ? Boolean.FALSE : chain.proceed());
                 widgetViewBlurMode = viewBlur;
-            } catch (ReflectiveOperationException error) { warning("Widget no-blur material unavailable; OEM blur kept", error); }
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Widget no-blur material unavailable; OEM blur kept", error); }
             for (String name : new String[]{"updateBackground", "updateBackgroundToN8"}) {
                 hook(background.getDeclaredMethod(name, View.class, List.class, List.class, int.class)).intercept(chain -> {
                     // The stock pager owns its material, blend colors and theme; we only choose which of the
@@ -394,6 +396,10 @@ public final class NativeModule extends XposedModule {
         }
     }
 
+    private static void startSystemUi(String id, BooleanSupplier start) {
+        HostCapabilities.start(id, start, error -> warning("SystemUI startup failed: " + id, error));
+    }
+
     private void mount(ViewGroup root) throws Exception {
         // updateWindowSize can run before onFinishInflate has assigned the pager field.
         View pager = (View) field(root, "mPagerView");
@@ -401,25 +407,30 @@ public final class NativeModule extends XposedModule {
         registerDiagnostics(root.getContext().getApplicationContext());
         WindowSession session = session(root);
         if (!session.control.active() || session.rebuilding || session.backgroundHelper.get() == null) return;
-        if (!widgetsExpanded(session)) hideStockPager(pager); else session.widgets.present();
         NativeDock existing = root.findViewWithTag(VIEW_TAG);
-        if (existing != null) {
-            session.dock = new WeakReference<>(existing);
-            registerInputRegion(root, session);
-            return;
-        }
-        NativeDock dock = new NativeDock(root.getContext());
+        NativeDock dock = existing == null ? new NativeDock(root.getContext()) : existing;
         session.dock = new WeakReference<>(dock);
-        dock.setTag(VIEW_TAG);
-        root.setPadding(0, 0, 0, 0);
-        root.addView(dock, new FrameLayout.LayoutParams(DockSpec.WIDTH, DockSpec.HEIGHT, Gravity.TOP | Gravity.RIGHT));
-        registerInputRegion(root, session);
+        try {
+            if (existing == null) {
+                dock.setTag(VIEW_TAG);
+                root.setPadding(0, 0, 0, 0);
+                root.addView(dock, new FrameLayout.LayoutParams(DockSpec.WIDTH, DockSpec.HEIGHT, Gravity.TOP | Gravity.RIGHT));
+                dock.applyAppearance(false);
+                dock.widgetActions(() -> openWidgets(root), () -> closeWidgets(root));
+                dock.miniWindowAction(() -> requestMiniWindow(root));
+                dock.backgroundChanges(() -> { main.removeCallbacks(refreshScenes); main.post(refreshScenes); });
+                dock.widgetsAvailable(widgetStyle != null && widgetCount(pager) > 0);
+            }
+            if (!dock.enabled) throw new IllegalStateException("Native controls did not finish attaching");
+            registerInputRegion(root, session);
+            // Only take ownership after the replacement (including required touch wiring) is ready.
+            if (!widgetsExpanded(session)) hideStockPager(pager); else session.widgets.present();
+        } catch (Exception | LinkageError failure) {
+            rollbackDock(root, session, dock, failure);
+            throw failure;
+        }
+        if (existing != null) return;
         docks.add(new WeakReference<>(dock));
-        dock.applyAppearance(false);
-        dock.widgetActions(() -> openWidgets(root), () -> closeWidgets(root));
-        dock.miniWindowAction(() -> requestMiniWindow(root));
-        dock.backgroundChanges(() -> { main.removeCallbacks(refreshScenes); main.post(refreshScenes); });
-        dock.widgetsAvailable(widgetStyle != null && widgetCount(pager) > 0);
         dock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             if (r - l == or - ol && b - t == ob - ot) return;
             int[] at = new int[2]; root.getLocationOnScreen(at);
@@ -428,6 +439,15 @@ public final class NativeModule extends XposedModule {
         });
         log(Log.INFO, TAG, "Replaced native pager contents; original window/token/rotation retained");
         reportFlipHome(root);
+    }
+
+    private void rollbackDock(ViewGroup root, WindowSession session, NativeDock dock, Throwable failure) {
+        dock.enabled = false; // Re-entrant OEM callbacks must delegate while the stock window is restored.
+        try {
+            restoreRoot(root, session);
+            if (root.isAttachedToWindow()) reportFlipHome(root);
+        }
+        catch (Exception | LinkageError cleanup) { failure.addSuppressed(cleanup); }
     }
 
     private static void reportSystemUiFallback() {
@@ -797,8 +817,8 @@ public final class NativeModule extends XposedModule {
                     if (!view.isAttachedToWindow()) return;
                     try {
                         ViewGroup group = (ViewGroup) view;
-                        mount(group); configureNativeColumn(group); registerInputRegion(group, session);
-                    } catch (Exception error) { log(Log.ERROR, TAG, "Native window reattach failed", error); }
+                        mount(group); configureNativeColumn(group);
+                    } catch (Exception | LinkageError error) { log(Log.ERROR, TAG, "Native window reattach failed", error); }
                 });
             }
             @Override public void onViewDetachedFromWindow(View view) {
@@ -879,6 +899,8 @@ public final class NativeModule extends XposedModule {
         if (CoverRotation.landscape(rotation) && !currentConfig.landscapeCompat) {
             return restoreLandscapeNative(root, session, dock, rotationChanged);
         }
+        try { registerInputRegion(root, session); }
+        catch (Exception | LinkageError failure) { rollbackDock(root, session, dock, failure); throw failure; }
         reconcileHostVisibility(root, session, rotation);
         dock.setVisibility(View.VISIBLE);
         dock.applyRotation(rotation);
@@ -944,7 +966,6 @@ public final class NativeModule extends XposedModule {
         // Xiaomi updateWindowSize restores resource padding on every call, not just inflate.
         if (root.getPaddingLeft() != 0 || root.getPaddingTop() != 0 || root.getPaddingRight() != 0 || root.getPaddingBottom() != 0)
             root.setPadding(0, 0, 0, 0);
-        registerInputRegion(root, session);
         WindowManager.LayoutParams nativeParams = (WindowManager.LayoutParams) field(root, "mLayoutParams");
         if (widgetsExpanded(session) && session.widgetBackground != currentConfig.background) {
             session.widgetBackground = currentConfig.background; session.widgets.materialChanged();

@@ -8,6 +8,13 @@
         <package android:name="com.miui.fliphome" />
         <package android:name="com.android.systemui" />
         <package android:name="com.miui.systemui.overlay.devices.android" />
+        <package android:name="com.android.calendar" />
+        <package android:name="com.android.contacts" />
+        <package android:name="com.android.deskclock" />
+        <package android:name="com.android.mms" />
+        <package android:name="com.android.soundrecorder" />
+        <package android:name="com.miui.calculator" />
+        <package android:name="com.miui.gallery" />
     </queries>
     <application android:name=".FlipDuoApplication" android:label="FlipDuo" android:icon="@mipmap/ic_launcher" android:description="@string/module_description"
         android:allowBackup="false" android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
