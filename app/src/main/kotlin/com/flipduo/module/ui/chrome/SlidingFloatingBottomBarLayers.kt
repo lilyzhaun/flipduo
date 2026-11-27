@@ -27,7 +27,7 @@ import top.yukonga.miuix.kmp.blur.*
 @Composable
 internal fun SlidingBarLayers(
     modifier: Modifier, items: List<SlidingBarItem>, selectedIndex: Int, onSelected: (Int) -> Unit,
-    liquidEnabled: Boolean, backdrop: LayerBackdrop?, tabWidthPx: Float, panelOffset: Float,
+    liquidEnabled: Boolean, backdrop: LayerBackdrop?, tabWidthPx: Float, panelOffset: () -> Float,
     drag: DampedDragAnimation, position: () -> Float, ltr: Boolean, onMeasured: (Int) -> Unit,
 ) {
     if (liquidEnabled && backdrop != null) {
@@ -49,7 +49,7 @@ internal fun SlidingBarLayers(
 @Composable
 private fun BarFrame(
     modifier: Modifier, items: List<SlidingBarItem>, selectedIndex: Int, onSelected: (Int) -> Unit,
-    panelOffset: Float, onMeasured: (Int) -> Unit, backdrop: Backdrop?, capture: LayerBackdrop?,
+    panelOffset: () -> Float, onMeasured: (Int) -> Unit, backdrop: Backdrop?, capture: LayerBackdrop?,
     overlay: @Composable () -> Unit,
 ) {
     val colors = uiColors()
@@ -58,7 +58,7 @@ private fun BarFrame(
     val isInDark = isSystemInDarkTheme()
     val pillShape = CircleShape
     val base = (capture?.let { Modifier.layerBackdrop(it) } ?: Modifier)
-        .graphicsLayer { translationX = panelOffset }
+        .graphicsLayer { translationX = panelOffset() }
         .dropShadow(shape = pillShape, shadow = Shadow(radius = 10.dp, color = Color.Black, alpha = if (isInDark) 0.2f else 0.1f))
         .then(if (backdrop == null) Modifier.background(colors.surface, pillShape) else Modifier.drawBackdrop(
             backdrop = backdrop, shape = { pillShape }, effects = {

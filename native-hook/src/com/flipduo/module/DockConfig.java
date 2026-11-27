@@ -14,6 +14,8 @@ public final class DockConfig {
     public String positions = new DockLayout().encode();
     public int statusBarHeight = 64;
     public boolean notificationFullscreen = false;
+    public static final String COVER_NOTIFICATION_LONG_PRESS = "cover_notification_long_press";
+    public boolean coverNotificationLongPress = false;
     public boolean hideCoverBottomGuard = false;
     public String coverInputMethod = "";
     public int coverInputMethodUser = -1;
@@ -121,6 +123,7 @@ public final class DockConfig {
         c.revision = prefs.getInt("revision", 0);
         c.statusBarHeight = bound(prefs.getInt("status_bar_height", 64), 48, 114);
         c.notificationFullscreen = prefs.getBoolean("notification_fullscreen", false);
+        c.coverNotificationLongPress = prefs.getBoolean(COVER_NOTIFICATION_LONG_PRESS, false);
         c.hideCoverBottomGuard = prefs.getBoolean("hide_cover_bottom_guard", false);
         c.coverInputMethod = prefs.getString(CoverInputMethodConfig.KEY, "");
         c.coverInputMethodUser = prefs.getInt(CoverInputMethodConfig.USER_KEY, -1);

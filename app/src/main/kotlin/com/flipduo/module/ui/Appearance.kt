@@ -4,6 +4,7 @@ package com.flipduo.module.ui
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,7 +43,7 @@ class AppearanceStore(context: Context) {
     }
 }
 
-internal val LocalRouteActive = staticCompositionLocalOf { true }
+internal val LocalRouteActive = compositionLocalOf { true }
 internal val LocalBottomInset = staticCompositionLocalOf { androidx.compose.ui.unit.Dp(0f) }
 
 internal data class UiColors(val canvas: Color, val surface: Color, val text: Color, val secondary: Color, val accent: Color)

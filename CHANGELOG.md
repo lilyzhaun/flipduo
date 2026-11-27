@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.17
+
+Changes since 0.7.14:
+
+- Add an optional native long-press menu for notifications in the expanded, unlocked cover-screen notification shade. The switch is off by default under Settings → Cover screen behavior → System shortcuts.
+- Rename the Fullscreen apps page to Cover app display (外屏应用显示). Each app keeps its saved display mode and content size, including custom sizes in Follow system mode.
+- Open Settings directly from Home and load settings rows as they scroll into view. The cover-screen preview is now in Layout.
+
+Reload System UI after updating to load the notification menu option. Its dispatch paths were checked against the MIX Flip HyperOS 3 and MIX Flip 2 HyperOS 3 and 4 ROMs; on-device menu behavior remains unverified.
+
 ## 0.7.14
 
 Changes since the complete 0.7.9 release (`v0.7.9-full`):

@@ -30,7 +30,7 @@ import top.yukonga.miuix.kmp.blur.highlight.*
 
 @Composable
 internal fun LiquidIndicator(
-    tabWidthPx: Float, panelOffset: Float, drag: DampedDragAnimation, ltr: Boolean,
+    tabWidthPx: Float, panelOffset: () -> Float, drag: DampedDragAnimation, ltr: Boolean,
     backdrop: Backdrop, highlight: InteractiveHighlight, position: () -> Float = { drag.value },
 ) {
     if (tabWidthPx <= 0f) return
@@ -39,7 +39,7 @@ internal fun LiquidIndicator(
     val accent = MiuixTheme.colorScheme.primary
     val layout = floatingRowLayoutContract()
     Box(Modifier.padding(horizontal = layout.innerPaddingDp.dp)
-        .graphicsLayer { translationX = bubbleTranslationPx(position(), tabWidthPx, !ltr) + panelOffset }
+        .graphicsLayer { translationX = bubbleTranslationPx(position(), tabWidthPx, !ltr) + panelOffset() }
         .then(highlight.gestureModifier).then(drag.modifier)
         .drawBackdrop(backdrop = backdrop, shape = { androidx.compose.foundation.shape.CircleShape }, effects = {
             val progress = drag.pressProgress
@@ -62,13 +62,13 @@ internal fun LiquidIndicator(
 }
 
 @Composable
-internal fun OpaqueIndicator(tabWidthPx: Float, panelOffset: Float, drag: DampedDragAnimation, ltr: Boolean, position: () -> Float = { drag.value }) {
+internal fun OpaqueIndicator(tabWidthPx: Float, panelOffset: () -> Float, drag: DampedDragAnimation, ltr: Boolean, position: () -> Float = { drag.value }) {
     if (tabWidthPx <= 0f) return
     val density = LocalDensity.current
     val accent = MiuixTheme.colorScheme.primary
     val layout = floatingRowLayoutContract()
     Box(Modifier.padding(horizontal = layout.innerPaddingDp.dp).graphicsLayer {
-        translationX = bubbleTranslationPx(position(), tabWidthPx, !ltr) + panelOffset
+        translationX = bubbleTranslationPx(position(), tabWidthPx, !ltr) + panelOffset()
         scaleX = drag.scaleX
         scaleY = drag.scaleY
     }.then(drag.modifier).clip(androidx.compose.foundation.shape.CircleShape)
