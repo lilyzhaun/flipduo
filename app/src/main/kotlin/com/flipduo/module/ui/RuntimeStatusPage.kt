@@ -59,7 +59,7 @@ internal fun RuntimeStatusPage(store: ControlsStore, c: Controls, back: () -> Un
         } }
         item { SmallTitle("系统框架") }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
-            BasicComponent(title = "应用全屏策略", summary = policy.summary)
+            BasicComponent(title = "${COVER_APP_DISPLAY_TITLE}策略", summary = policy.summary)
         } }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
             ManagerActionButton(text = "刷新", onClick = store::refreshRuntime, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))

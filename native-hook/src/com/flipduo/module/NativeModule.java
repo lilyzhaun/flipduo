@@ -146,6 +146,8 @@ public final class NativeModule extends XposedModule {
             catch (Throwable error) { HostCapabilities.installed("status_bar", false); warning("Cover statusbar policy unavailable; status source and tools kept", error); }
             try { CoverNotificationLayout.install(this, param.getClassLoader()); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Cover notification layout unavailable; native shade retained", error); }
+            try { CoverNotificationLongPress.install(this, param.getClassLoader()); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Cover notification long-press menu unavailable; native interaction retained", error); }
             try { CoverLandscapeShade.installNotifications(this, param.getClassLoader()); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError error) { warning("Cover landscape notification interaction unavailable", error); }
             try { CoverLandscapeDismiss.install(this, param.getClassLoader()); }

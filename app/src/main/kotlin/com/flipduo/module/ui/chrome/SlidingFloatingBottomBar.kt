@@ -23,7 +23,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import kotlin.math.roundToInt
@@ -117,9 +116,10 @@ internal fun SlidingFloatingBottomBar(
         }
     }
     LaunchedEffect(selectedIndex) {
-        snapshotFlow { selectedIndex }.collectLatest {
-            currentIndex = it
-            if (!followingPager) drag.animateToValue(it.toFloat())
+        // A bar tap/drag already launched its spring. Only animate selections originating elsewhere.
+        if (currentIndex != selectedIndex) {
+            currentIndex = selectedIndex
+            if (!followingPager) drag.animateToValue(selectedIndex.toFloat())
         }
     }
     SlidingBarLayers(
@@ -142,7 +142,7 @@ internal fun SlidingFloatingBottomBar(
             if (index != latestSelectedIndex) latestOnSelected(index) else latestOnReselected(index)
         },
         liquidEnabled = spec.effectiveLiquidGlass && backdrop != null, backdrop = backdrop,
-        tabWidthPx = tabWidthPx, panelOffset = panelOffset, drag = drag,
+        tabWidthPx = tabWidthPx, panelOffset = { panelOffset }, drag = drag,
         position = { if (followingPager && pagerState != null) pagerState.currentPage + pagerState.currentPageOffsetFraction else drag.value },
         ltr = ltr,
         onMeasured = { width ->

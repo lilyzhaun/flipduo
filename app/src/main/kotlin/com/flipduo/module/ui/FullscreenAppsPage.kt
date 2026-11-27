@@ -37,6 +37,8 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 
+internal const val COVER_APP_DISPLAY_TITLE = "外屏应用显示"
+
 private data class FullscreenApp(val packageName: String, val label: String, val system: Boolean, val info: ApplicationInfo?)
 
 @Composable
@@ -92,7 +94,7 @@ internal fun FullscreenAppsPage(store: ControlsStore, controls: Controls, back: 
                 (app.label.contains(text, ignoreCase = true) || app.packageName.contains(text, ignoreCase = true))
         }
     }
-    PageFrame("应用全屏", onBack = back, itemSpacing = 12.dp, actions = {
+    PageFrame(COVER_APP_DISPLAY_TITLE, onBack = back, itemSpacing = 12.dp, actions = {
         ManagerActionButton(text = "刷新", compact = true, onClick = { refresh++; store.retrySync(); store.refreshSystemPolicy() })
     }) {
         item(key = "search") {

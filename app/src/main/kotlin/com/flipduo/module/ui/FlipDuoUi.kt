@@ -18,6 +18,9 @@ import androidx.navigation3.runtime.*
 import androidx.navigation3.scene.*
 import androidx.navigation3.ui.*
 import androidx.navigationevent.compose.*
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.theme.*
 
@@ -36,10 +39,11 @@ fun FlipDuoUi() {
     // Process-wide store: settings saves outlive this composition and activity recreation.
     val controls = remember { ControlsStore.shared(context) }
     val state by controls.state.collectAsState()
-    val save by controls.saveStatus.collectAsState()
     // Rare local commit failure: say so once per failed snapshot; the edit stays visible and retryable.
-    LaunchedEffect(save.localFailed, save.latest) {
-        if (save.localFailed) Toast.makeText(context, "设置未能保存到本机，可在“运行状态”页重试", Toast.LENGTH_LONG).show()
+    LaunchedEffect(controls, context) {
+        controls.saveStatus.map { if (it.localFailed) it.latest else null }.distinctUntilChanged().filterNotNull().collect {
+            Toast.makeText(context, "设置未能保存到本机，可在“运行状态”页重试", Toast.LENGTH_LONG).show()
+        }
     }
     val connection by controls.connection.collectAsState()
     val appearanceStore = remember { AppearanceStore(context) }
@@ -76,7 +80,7 @@ fun FlipDuoUi() {
                             { key -> navigate("long_app_${key.id}") }, ::manager, { panel -> navigate(panel.route) },
                             scrollState = settingsScroll.getValue(SettingsPanel.MENU))
                     } }
-                    val keys = listOf<Any>(RootOverlay) + pages.map { route -> when (route) {
+                    val keys = remember(pages) { listOf<Any>(RootOverlay) + pages.map { route -> when (route) {
                         "about" -> AboutRoute
                         "license" -> LicenseRoute
                         "fullscreen_apps" -> FullscreenAppsRoute
@@ -86,7 +90,7 @@ fun FlipDuoUi() {
                              route.startsWith("settings_") -> SettingsRoute(SettingsPanel.entries.first { it.route == route })
                             else -> AppearanceRoute
                         }
-                    } }
+                    } } }
                     val entries = entryProvider<Any> {
                         entry<RootOverlay> { Box(Modifier.fillMaxSize()) }
                         entry<AboutRoute> { AboutPage({ navigate("license") }) { if (pages.lastOrNull() == "about") back() } }

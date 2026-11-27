@@ -3,6 +3,7 @@ package com.flipduo.module.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -45,6 +46,9 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.preference.*
+import top.yukonga.miuix.kmp.squircle.squircleSurface
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun HomePage(store: ControlsStore, connection: Connection, c: Controls, manager: () -> Unit, details: () -> Unit) {
@@ -84,7 +88,6 @@ internal fun HomePage(store: ControlsStore, connection: Connection, c: Controls,
             ArrowPreference(title = "运行状态", summary = "宿主版本、回执与功能", onClick = details)
             ArrowPreference(title = "LSPosed 管理", summary = "作用域与模块状态", onClick = manager)
         } }
-        item { Preview(store, c) }
     }
     ScopeRestartDialog(showRestart, dismiss = { showRestart = false }, refreshTargets = store::refreshTargets)
 }
@@ -94,7 +97,9 @@ private fun Preview(store: ControlsStore, c: Controls, editable: Boolean = false
     viewportHeight: Dp? = null, compact: Boolean = false, showGuidance: Boolean = true,
     toggleSize: (() -> Unit)? = null) {
     val colors = uiColors()
-    val epoch by store.runtimeEpoch.collectAsState()
+    val active = LocalRouteActive.current
+    val epoch = if (active) store.previewStatusEpoch.collectAsState() else null
+    val config = remember(c) { c.nativeConfig() }
     var rotated by rememberSaveable { mutableStateOf(false) }
     val appHaptics = LocalAppearance.current.haptics
     val onPositions by rememberUpdatedState<(String) -> Unit>({ value -> store.update { it.copy(positions = value) } })
@@ -102,8 +107,8 @@ private fun Preview(store: ControlsStore, c: Controls, editable: Boolean = false
     val preview: @Composable (Dp) -> Unit = { height ->
         val size = Modifier.height(height).aspectRatio(ratio, matchHeightConstraintsFirst = true)
         AndroidView(factory = { DockPreview(it) }, modifier = size.testTag("cover-preview"),
-                update = { view -> epoch; view.setEditorHaptics(appHaptics); view.setCameraPreview(cameraPreview)
-                    view.update(c.nativeConfig(), store.runtime, rotated, editable) { onPositions(it) } })
+                update = { view -> view.setPageActive(active); view.setEditorHaptics(appHaptics); view.setCameraPreview(cameraPreview)
+                    view.bindSnapshot(config, store.runtime, epoch?.value ?: store.previewStatusEpoch.value, rotated, editable) { onPositions(it) } })
     }
     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(if (compact) 12.dp else 16.dp)) {
       BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -165,7 +170,6 @@ internal enum class LayoutPanel(val title: String, val summary: String) {
 @Composable
 internal fun LayoutPage(store: ControlsStore, c: Controls) {
     val context = LocalContext.current
-    val geometry = remember(context) { CoverGeometry.resolve(context) }
     var panel by rememberSaveable { mutableStateOf(LayoutPanel.MENU) }
     var colorTarget by rememberSaveable { mutableStateOf<CameraColorTarget?>(null) }
     var showColorPicker by rememberSaveable { mutableStateOf(false) }
@@ -228,7 +232,7 @@ internal fun LayoutPage(store: ControlsStore, c: Controls) {
             LazyColumn(state = scrollStates.getValue(visiblePanel), overscrollEffect = null,
                 modifier = Modifier.fillMaxSize().then(feedback), contentPadding = padding,
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                layoutPanelItems(visiblePanel, store, c, geometry,
+                layoutPanelItems(visiblePanel, store, c,
                     chooseColor = { target -> colorTarget = target; showColorPicker = true }, select = { panel = it },
                     presets = { PresetSlots(store, presets, presetEpoch, ::editPreset) { slot -> presets.clear(slot); presetEpoch++ } },
                     fineOpen = { SettingsLayers.isOpen(fineOpen, it.name) }, toggleFine = { fineOpen = SettingsLayers.toggle(fineOpen, it.name) })
@@ -300,7 +304,7 @@ internal fun UndoGroupCard(store: ControlsStore, group: SettingsGroup) {
 internal val LayoutPanel.undoGroup: SettingsGroup? get() = SettingsGroup.entries.firstOrNull { it.name == name }
 internal val SettingsPanel.undoGroup: SettingsGroup? get() = SettingsGroup.entries.firstOrNull { it.name == name }
 
-private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsStore, c: Controls, geometry: CoverGeometry,
+private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsStore, c: Controls,
     chooseColor: (CameraColorTarget) -> Unit, select: (LayoutPanel) -> Unit,
     presets: @Composable () -> Unit,
     fineOpen: (LayoutPanel) -> Boolean = { false }, toggleFine: (LayoutPanel) -> Unit = {}) {
@@ -463,13 +467,15 @@ private fun LazyListScope.layoutPanelItems(panel: LayoutPanel, store: ControlsSt
         LayoutPanel.CORNERS -> item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
             SwitchPreference(title = "应用侧圆角", summary = "纯黑或模糊填充时修饰应用交界；最近任务圆角还需开启“裁切最近任务”。关闭裁切会保留此选择。", checked = c.systemCorners,
                 onCheckedChange = { store.update { old -> old.copy(systemCorners = it) } })
+            val context = LocalContext.current
+            val geometry = remember(context) { CoverGeometry.resolve(context) }
             SwitchPreference(title = "上下对称圆角", summary = "开启后上下均为 ${geometry.appTop(false, true, true)}px；关闭时上 ${geometry.top(false)}px、下 ${geometry.bottom(false)}px，倒置时交换。仅在应用侧圆角开启时生效。",
                 checked = c.symmetricCorners,
                 onCheckedChange = { store.update { old -> old.copy(symmetricCorners = it) } })
         } }
         LayoutPanel.PRESETS -> {
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(20.dp)) {
-            Text("方案只保存在本机，包含圆环与呼吸灯颜色、圆环粗细、三合一样式、时钟显示、控件大小与应用侧圆角；不包含镜头位置校准、外屏背景、应用全屏名单、长按动作和总开关。应用方案后，可在对应页面撤销。",
+            Text("方案只保存在本机，包含圆环与呼吸灯颜色、圆环粗细、三合一样式、时钟显示、控件大小与应用侧圆角；不包含镜头位置校准、外屏背景、各应用的显示设置、长按动作和总开关。应用方案后，可在对应页面撤销。",
                 color = uiColors().secondary, fontSize = 12.sp, lineHeight = 18.sp)
         } }
         item { presets() }
@@ -546,30 +552,33 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
         HideOuterPage(store, c, back, scrollState)
         return
     }
-    val screenshotScope by store.screenshotScope.collectAsState()
-    val systemScope by store.systemScope.collectAsState()
-    val connection by store.connection.collectAsState()
-    val deliveredRevision by store.deliveredRevision.collectAsState()
-    val syncFailed by store.syncFailed.collectAsState()
-    val policy by store.systemPolicy.collectAsState()
     // Each category is a real saveable NavEntry, using the same push/pop animation as About.
-    PageFrame(panel.title, onBack = if (panel == SettingsPanel.MENU) null else back, scrollState = scrollState) {
+    PageFrame(panel.title, onBack = if (panel == SettingsPanel.MENU) null else back, scrollState = scrollState,
+        itemSpacing = if (panel == SettingsPanel.MENU) 0.dp else 12.dp) {
         when (panel) {
         SettingsPanel.INPUT_METHOD, SettingsPanel.HIDE_OUTER -> Unit // Dedicated pickers above share the category's navigation entry.
         SettingsPanel.MENU -> {
-        item { SmallTitle("外屏功能") }
-        item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
-            ArrowPreference(title = "应用全屏", summary = "已设置 ${c.configuredDisplayApps.size} 个应用 · 模式与内容大小", onClick = fullscreenApps)
-            SettingsPanel.entries.filter { it != SettingsPanel.MENU }.forEach { destination ->
-                ArrowPreference(title = destination.title, summary = destination.summary, onClick = { selectPanel(destination) })
+        item("cover-title", "section") { SmallTitle("外屏功能", modifier = Modifier.padding(bottom = 12.dp)) }
+        item("fullscreen", "menu-row") {
+            ArrowPreference(title = COVER_APP_DISPLAY_TITLE, modifier = menuRowSurface(first = true),
+                summary = "按应用设置全屏模式与内容大小 · 已设置 ${c.configuredDisplayApps.size} 个应用", onClick = fullscreenApps)
+        }
+        for (destination in SettingsPanel.entries) if (destination != SettingsPanel.MENU) {
+            item(destination.route, "menu-row") {
+                ArrowPreference(title = destination.title, modifier = menuRowSurface(last = destination == SettingsPanel.entries.last()),
+                    summary = destination.summary, onClick = { selectPanel(destination) })
             }
-        } }
-        item { SmallTitle("管理应用") }
-        item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
-            ArrowPreference(title = "应用外观", summary = "主题、底栏与应用内交互", onClick = appearance)
-            ArrowPreference(title = "LSPosed 管理", summary = "查看模块启用与作用域", onClick = manager)
-            ArrowPreference(title = "关于 FlipDuo", summary = BuildConfig.VERSION_NAME, onClick = about)
-        } }
+        }
+        item("manager-title", "section") { SmallTitle("管理应用", modifier = Modifier.padding(vertical = 12.dp)) }
+        item("appearance", "menu-row") {
+            ArrowPreference(title = "应用外观", modifier = menuRowSurface(first = true), summary = "主题、底栏与应用内交互", onClick = appearance)
+        }
+        item("manager", "menu-row") {
+            ArrowPreference(title = "LSPosed 管理", modifier = menuRowSurface(), summary = "查看模块启用与作用域", onClick = manager)
+        }
+        item("about", "menu-row") {
+            ArrowPreference(title = "关于 FlipDuo", modifier = menuRowSurface(last = true), summary = BuildConfig.VERSION_NAME, onClick = about)
+        }
         }
         SettingsPanel.BEHAVIOR -> {
         item { SmallTitle("背景") }
@@ -612,6 +621,10 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
         } }
         item { SmallTitle("系统入口") }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
+            val policy by store.systemPolicy.collectAsState()
+            SwitchPreference(title = "恢复外屏通知长按菜单", checked = c.coverNotificationLongPress,
+                summary = "解锁后长按通知列表中的通知，显示与内屏相同的系统菜单。首次使用需重载系统界面。",
+                onCheckedChange = { value -> store.update { it.copy(coverNotificationLongPress = value) } })
             SwitchPreference(title = "通知全宽", checked = c.notificationFullscreen,
                 summary = "扩展外屏通知区域，控制中心保持原布局。镜头位置的内容可能被硬件遮住；关闭恢复原生布局。首次需系统界面加载新版。",
                 onCheckedChange = { value -> store.update { it.copy(notificationFullscreen = value) } })
@@ -675,6 +688,7 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
         }
         SettingsPanel.SCREENSHOTS -> {
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
+            val screenshotScope by store.screenshotScope.collectAsState()
             SwitchPreference(title = "带壳截图", summary = "加入机身、镜头与闪光灯，PNG 保留机身四角外的透明区域", checked = c.framedScreenshots,
                 onCheckedChange = { store.update { old -> old.copy(framedScreenshots = it) } })
             ArrowPreference(title = "截图作用域", summary = screenshotScope, onClick = store::requestScreenshotScope)
@@ -683,8 +697,12 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
         SettingsPanel.COMPATIBILITY -> {
         item { SmallTitle("外屏应用") }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
+            val connection by store.connection.collectAsState()
+            val syncFailed by store.syncFailed.collectAsState()
+            val deliveredRevision by store.deliveredRevision.collectAsState()
+            val policy by store.systemPolicy.collectAsState()
             SwitchPreference(title = "解除外屏应用限制", checked = c.unrestrictCoverApps,
-                summary = "解除系统对外屏启动资格的限制；应用全屏、缩放和折叠接续仍由各自设置控制。首次需系统框架加载新版。",
+                summary = "解除系统对外屏启动资格的限制；显示模式、内容大小和折叠接续仍由各自设置控制。首次需系统框架加载新版。",
                 onCheckedChange = { value -> store.update { it.copy(unrestrictCoverApps = value) } })
             Text(when {
                 !connection.connected || syncFailed -> "设置仅保存在本机，连接 LSPosed 后同步。"
@@ -695,6 +713,10 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
         } }
         item { SmallTitle("内屏兼容") }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
+            val connection by store.connection.collectAsState()
+            val syncFailed by store.syncFailed.collectAsState()
+            val deliveredRevision by store.deliveredRevision.collectAsState()
+            val policy by store.systemPolicy.collectAsState()
             val status = when {
                 !connection.connected || syncFailed -> "设置仅保存在本机，连接 LSPosed 后同步"
                 deliveredRevision != c.revision -> "正在同步设置"
@@ -709,6 +731,7 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
                 onCheckedChange = { store.update { old -> old.copy(innerRecentsCompat = it) } })
         } }
         item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(0.dp)) {
+            val systemScope by store.systemScope.collectAsState()
             ArrowPreference(title = "系统框架作用域", summary = systemScope, onClick = store::requestSystemScope)
         } }
         item { SmallTitle("输入法") }
@@ -718,6 +741,16 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
         }
         panel.undoGroup?.let { group -> item { UndoGroupCard(store, group) } }
     }
+}
+
+/** Separate lazy items, visually one MIUIX card; the pressed indication stays inside its end corners. */
+@Composable
+private fun menuRowSurface(first: Boolean = false, last: Boolean = false): Modifier {
+    val color = CardDefaults.defaultColors().color
+    if (!first && !last) return Modifier.fillMaxWidth().background(color)
+    val top = if (first) CardDefaults.CornerRadius else 0.dp
+    val bottom = if (last) CardDefaults.CornerRadius else 0.dp
+    return Modifier.fillMaxWidth().squircleSurface(color, top, top, bottom, bottom)
 }
 
 @Composable
@@ -735,10 +768,13 @@ internal fun NavigationLongPressPreferences(c: Controls, chooseApp: (NavigationK
                 })
             if (c.longPress(key) == NavigationLongPress.LAUNCH_APP) {
                 val pkg = c.longPressApp(key)
-                val label = remember(pkg, context) {
-                    if (pkg.isEmpty()) "请选择应用" else try {
-                        context.packageManager.getApplicationInfo(pkg, 0).loadLabel(context.packageManager).toString()
-                    } catch (_: android.content.pm.PackageManager.NameNotFoundException) { "应用已卸载，请重新选择" }
+                val label by key(pkg) {
+                    produceState(pkg.ifEmpty { "请选择应用" }, context) {
+                        if (pkg.isNotEmpty()) value = withContext(Dispatchers.IO) {
+                            try { context.packageManager.getApplicationInfo(pkg, 0).loadLabel(context.packageManager).toString() }
+                            catch (_: android.content.pm.PackageManager.NameNotFoundException) { "应用已卸载，请重新选择" }
+                        }
+                    }
                 }
                 ArrowPreference(title = "${key.title}打开的应用", summary = label, onClick = { chooseApp(key) })
             }

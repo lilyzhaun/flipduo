@@ -93,6 +93,7 @@ internal data class Controls(
     val followSystemScales: Map<String, Int> = emptyMap(),
     val rustGalleryLayout: Boolean = false,
     val fixControlCenterRotation: Boolean = false,
+    val coverNotificationLongPress: Boolean = false,
 )
 
 internal val Controls.configuredDisplayApps: Set<String> get() = fullscreenApps + followSystemScales.keys
@@ -155,13 +156,15 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
     val deliveredRevision = MutableStateFlow(-1)
     val syncFailed = MutableStateFlow(false)
     val screenshotScope = MutableStateFlow("授权系统截图，用于外屏带壳截图")
-    val systemScope = MutableStateFlow("授权系统框架，用于应用全屏")
+    val systemScope = MutableStateFlow("授权系统框架，用于$COVER_APP_DISPLAY_TITLE")
     val systemPolicy = MutableStateFlow(SystemPolicyStatus())
-    var runtimeEpoch = MutableStateFlow(0)
+    val runtimeEpoch = MutableStateFlow(0)
+    val previewStatusEpoch = MutableStateFlow(0)
     /** Framework running targets, queried on bind, on a new host receipt and on manual refresh only. */
     val targets = MutableStateFlow(RuntimeStatus.Targets.disconnected())
     private val runtimeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        runtimeEpoch.value++
+        if (key == null || key.startsWith("status_")) previewStatusEpoch.value++
+        if (key == null || key.startsWith("fliphome_") || key.startsWith("systemui_")) runtimeEpoch.value++
         // Battery/signal status writes share this file; one key per new host receipt justifies a framework query.
         if (key == "fliphome_time" || key == "systemui_time") refreshTargets()
     }
@@ -184,14 +187,16 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
                 return@collect
             }
             try {
-                val prefs = withContext(Dispatchers.IO) { service.getRemotePreferences(DockConfig.GROUP) }
-                screenshotScope.value = if ("com.miui.screenshot" in service.scope) "截图作用域已授权" else "点击授权系统截图作用域"
-                systemScope.value = if ("system" in service.scope || "android" in service.scope) "系统框架已授权；首次加载需重启手机" else "点击授权系统框架作用域"
+                val (prefs, grants, framework) = withContext(Dispatchers.IO) {
+                    Triple(service.getRemotePreferences(DockConfig.GROUP), service.scope.toSet(), "${service.frameworkName} · API ${service.apiVersion}")
+                }
+                screenshotScope.value = if ("com.miui.screenshot" in grants) "截图作用域已授权" else "点击授权系统截图作用域"
+                systemScope.value = if ("system" in grants || "android" in grants) "系统框架已授权；首次加载需重启手机" else "点击授权系统框架作用域"
                 if (!edited && !local.contains("revision")) {
                     val adopted = withContext(Dispatchers.IO) { read(prefs) }
                     if (!edited) { state.value = adopted; pipeline.submit(adopted) }
                 }
-                connection.value = Connection(true, "${service.frameworkName} · API ${service.apiVersion}", "正在同步设置…")
+                connection.value = Connection(true, framework, "正在同步设置…")
                 pipeline.attach { value -> write(prefs, value) }
                 refreshSystemPolicy()
                 refreshTargets()
@@ -327,6 +332,7 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
             .putBoolean("show_clock", c.showClock).putBoolean("show_trio", c.showTrio)
             .putBoolean("hide_cover_camera", c.hideCoverCamera)
             .putBoolean("notification_fullscreen", c.notificationFullscreen)
+            .putBoolean(DockConfig.COVER_NOTIFICATION_LONG_PRESS, c.coverNotificationLongPress)
             .putBoolean(com.flipduo.module.BottomGuardRules.KEY, c.hideCoverBottomGuard)
             .putString(CoverInputMethodConfig.KEY, c.coverInputMethod)
             .putInt(CoverInputMethodConfig.USER_KEY, c.coverInputMethodUser)
@@ -467,6 +473,7 @@ internal class ControlsStore(context: Context, private val scope: CoroutineScope
         followSystemScales = CutoutAppConfig.readSystemScales(p),
         rustGalleryLayout = p.getBoolean(RustGalleryLayout.KEY, false),
         fixControlCenterRotation = p.getBoolean(DockConfig.CONTROL_CENTER_ROTATION_FIX, false),
+        coverNotificationLongPress = p.getBoolean(DockConfig.COVER_NOTIFICATION_LONG_PRESS, false),
     )
 }
 
@@ -475,6 +482,7 @@ internal fun Controls.nativeConfig() = DockConfig().also {
     it.showClock = showClock; it.showTrio = showTrio; it.offsetY = offsetY; it.scale = scale
     it.hideCoverCamera = hideCoverCamera
     it.notificationFullscreen = notificationFullscreen
+    it.coverNotificationLongPress = coverNotificationLongPress
     it.hideCoverBottomGuard = hideCoverBottomGuard
     it.coverInputMethod = coverInputMethod; it.coverInputMethodUser = coverInputMethodUser
     it.desktopColumns = desktopColumns

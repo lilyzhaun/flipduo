@@ -44,13 +44,15 @@ internal fun PageFrame(
     val colors = uiColors()
     val appearance = LocalAppearance.current
     val effectiveBlur = appearance.blur && LocalShaderSupported.current
-    val backdrop = if (effectiveBlur) rememberLayerBackdrop {
+    val scroll = scrollState ?: rememberLazyListState()
+    val behavior = MiuixScrollBehavior(rememberTopAppBarState())
+    val overlapped by remember(behavior) { derivedStateOf { behavior.state.overlappedFraction > 0f } }
+    // Only the on/off threshold belongs in composition; the continuous opacity belongs in draw.
+    val sampleHeader = effectiveBlur && (onBack != null || (pinnedContent == null && overlapped))
+    val backdrop = if (sampleHeader) rememberLayerBackdrop {
         drawRect(colors.canvas.copy(alpha = 1f))
         drawContent()
     } else null
-    val defaultScroll = rememberLazyListState()
-    val scroll = scrollState ?: defaultScroll
-    val behavior = MiuixScrollBehavior(rememberTopAppBarState())
     val active = LocalRouteActive.current
     val motion = rememberCoroutineScope().coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f
     val reselect = LocalReselectEpoch.current
@@ -62,8 +64,7 @@ internal fun PageFrame(
             behavior.state.contentOffset = 0f
         }
     }
-    val headerBackdrop = backdrop.takeIf { onBack != null || behavior.state.overlappedFraction > 0f }
-    val header = if (headerBackdrop != null) Modifier.drawBackdrop(headerBackdrop, shape = { RectangleShape }, effects = { blur(25f) },
+    val header = if (backdrop != null) Modifier.drawBackdrop(backdrop, shape = { RectangleShape }, effects = { blur(25f) },
         onDrawSurface = { drawRect(colors.canvas.copy(alpha = if (onBack != null) 0.92f else 0.72f + 0.20f * behavior.state.overlappedFraction.coerceIn(0f, 1f))) })
         else Modifier.background(colors.canvas)
     val bottom = maxOf(LocalBottomInset.current, WindowInsets.ime.asPaddingValues().calculateBottomPadding())

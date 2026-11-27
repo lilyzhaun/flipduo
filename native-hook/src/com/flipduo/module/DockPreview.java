@@ -22,10 +22,12 @@ public final class DockPreview extends FrameLayout {
     private final Matrix transform = new Matrix();
     private Drawable column;
     private DockConfig config = new DockConfig();
+    private SharedPreferences statusSource;
+    private int statusEpoch;
     private DockLayout layout = new DockLayout(), dragOrigin;
     private LayoutListener listener;
     private boolean rotated, editable, dragging;
-    private boolean editorHaptics = true;
+    private boolean editorHaptics = true, pageActive = true;
     private int selected = -1, pointerId = -1;
     private float modelScale = 1, dx, dy, downX, downY, grabX, grabY;
     private final int touchSlop;
@@ -51,16 +53,30 @@ public final class DockPreview extends FrameLayout {
 
     public void update(DockConfig value, SharedPreferences runtime) { update(value, runtime, false, false, null); }
     public void setEditorHaptics(boolean enabled) { editorHaptics = enabled; }
-    public void setCameraPreview(boolean enabled) { cameraPreview = enabled; invalidate(); }
-    public void update(DockConfig value, SharedPreferences runtime, boolean reverse, boolean edit, LayoutListener changed) {
+    public void setPageActive(boolean active) { if (pageActive != active) { pageActive = active; syncClock(); } }
+    public void setCameraPreview(boolean enabled) { if (cameraPreview != enabled) { cameraPreview = enabled; invalidate(); } }
+    /** Compose publishes immutable config snapshots. Radio changes only update the header, not the editor layout. */
+    public void bindSnapshot(DockConfig value, SharedPreferences runtime, int epoch, boolean reverse, boolean edit, LayoutListener changed) {
         listener = changed;
+        if (runtime != statusSource || epoch != statusEpoch) {
+            updateStatus(runtime); statusSource = runtime; statusEpoch = epoch;
+        }
+        if (config != value || rotated != reverse || editable != (edit && !value.eventIsland)) configure(value, reverse, edit);
+    }
+    public void update(DockConfig value, SharedPreferences runtime, boolean reverse, boolean edit, LayoutListener changed) {
+        listener = changed; statusSource = null;
+        updateStatus(runtime); configure(value, reverse, edit);
+    }
+    private void updateStatus(SharedPreferences runtime) {
         Intent status = new Intent();
         for (String key : new String[]{"battery", "wl", "ml"}) status.putExtra(key, runtime.getInt("status_" + key, -1));
         for (String key : new String[]{"charging", "saver", "wk", "we", "wc", "mk", "sim", "service", "air"})
             status.putExtra(key, runtime.getBoolean("status_" + key, false));
         status.putExtra("rat", runtime.getString("status_rat", ""));
         dock.previewState(StatusWire.decode(status));
-        if (dragging && rotated == reverse && edit) return;
+    }
+    private void configure(DockConfig value, boolean reverse, boolean edit) {
+        if (dragging && rotated == reverse && edit && !value.eventIsland) return;
         cancelDrag(); rotated = reverse; editable = edit && !value.eventIsland; config = value;
         layout = DockLayout.decode(value.positions); dock.applyConfig(value);
         syncClock();
@@ -69,9 +85,9 @@ public final class DockPreview extends FrameLayout {
         dock.applyAppearance(reverse);
         dock.applyNativeTone(value.background != CoverBackground.BLACK, value.background == CoverBackground.BLACK, false);
         column = new DockAppearance().column(reverse, geometry, value.systemCorners, value.symmetricCorners);
-        setFocusable(edit); setContentDescription("完整外屏预览，" + (reverse ? "镜头左上、控制区左下" : "镜头右下、控制区右上")
+        setFocusable(editable); setContentDescription("完整外屏预览，" + (reverse ? "镜头左上、控制区左下" : "镜头右下、控制区右上")
                 + "。应用内容和镜头为示意，控制区为实际绘制。"
-                + (edit ? "双按钮组整体移动，等高控件可交换；方向键微调选中组。" : ""));
+                + (editable ? "双按钮组整体移动，等高控件可交换；方向键微调选中组。" : ""));
         rebuildPaths(); requestLayout(); invalidate();
     }
 
@@ -216,7 +232,7 @@ public final class DockPreview extends FrameLayout {
     }
     private void syncClock() {
         if (previewClock == null) return; // A View callback can run before subclass initialisation.
-        boolean visible = isAttachedToWindow() && isShown() && getWindowVisibility() == VISIBLE && config.showClock;
+        boolean visible = pageActive && isAttachedToWindow() && isShown() && getWindowVisibility() == VISIBLE && config.showClock;
         previewClock.update(visible, visible && (ClockLines.seconds(config.clockTop) || ClockLines.seconds(config.clockBottom)));
     }
 

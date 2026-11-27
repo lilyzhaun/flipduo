@@ -9,7 +9,7 @@ package com.flipduo.module.ui
 internal enum class SettingsGroup(val title: String) {
     CONTROLS("控件布局"), CAMERA("镜头圆环"), STATUS("时钟显示"), TRIO("三合一"), CORNERS("应用侧圆角"),
     BEHAVIOR("外屏行为"), NAVIGATION("控制区动作"), FEEDBACK("触感与动画"), SCREENSHOTS("外屏截图"),
-    COMPATIBILITY("兼容设置"), FULLSCREEN("应用全屏"), INPUT_METHOD("外屏输入法"), DESKTOP("外屏桌面"), HIDE_OUTER("隐藏外屏状态");
+    COMPATIBILITY("兼容设置"), FULLSCREEN(COVER_APP_DISPLAY_TITLE), INPUT_METHOD("外屏输入法"), DESKTOP("外屏桌面"), HIDE_OUTER("隐藏外屏状态");
 
     /** This group's business values, compared to detect which groups a commit touched. */
     fun values(c: Controls): List<Any?> = when (this) {
@@ -23,7 +23,8 @@ internal enum class SettingsGroup(val title: String) {
             c.trioNetworkWeight, c.trioBatteryNumber, c.trioBatteryScale, c.trioBatteryWeight)
         CORNERS -> listOf(c.systemCorners, c.symmetricCorners)
         BEHAVIOR -> listOf(c.background, c.recentsCrop, c.recentsStyle, c.recentsCardLongPress, c.eventIsland, c.islandLock,
-            c.landscapeCompat, c.fixControlCenterRotation, c.hideStatus, c.hideCoverCamera, c.statusBarHeight, c.notificationFullscreen, c.hideCoverBottomGuard)
+            c.landscapeCompat, c.fixControlCenterRotation, c.hideStatus, c.hideCoverCamera, c.statusBarHeight, c.notificationFullscreen,
+            c.coverNotificationLongPress, c.hideCoverBottomGuard)
         NAVIGATION -> listOf(c.backLongPress, c.homeLongPress, c.recentsLongPress, c.backLongPressApp, c.homeLongPressApp,
             c.recentsLongPressApp, c.trioTap, c.clockTap)
         FEEDBACK -> listOf(c.haptics, c.animations, c.animationMs)
@@ -60,7 +61,7 @@ internal enum class SettingsGroup(val title: String) {
             landscapeCompat = from.landscapeCompat, fixControlCenterRotation = from.fixControlCenterRotation,
             hideStatus = from.hideStatus, hideCoverCamera = from.hideCoverCamera,
             statusBarHeight = from.statusBarHeight, notificationFullscreen = from.notificationFullscreen,
-            hideCoverBottomGuard = from.hideCoverBottomGuard)
+            coverNotificationLongPress = from.coverNotificationLongPress, hideCoverBottomGuard = from.hideCoverBottomGuard)
         NAVIGATION -> target.copy(backLongPress = from.backLongPress, homeLongPress = from.homeLongPress,
             recentsLongPress = from.recentsLongPress, backLongPressApp = from.backLongPressApp,
             homeLongPressApp = from.homeLongPressApp, recentsLongPressApp = from.recentsLongPressApp,
