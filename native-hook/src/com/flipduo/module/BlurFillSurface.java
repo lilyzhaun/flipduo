@@ -9,7 +9,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.concurrent.Executor;
 
-/** Background below controls; app-edge material and restoration share a visibility gate above it. */
+/** Live background and one visible blur below controls; clear app restoration above them. */
 final class BlurFillSurface {
     private final Constructor<?> builder;
     private final Method name, parent, containerLayer, build, mirrorSurface, cornerRadius, colorTransform;
@@ -115,6 +115,24 @@ final class BlurFillSurface {
         } catch (RuntimeException error) { remove(target); throw error; }
         return target;
     }
+    static SurfaceControl continuousBlur(SurfaceControl parent, Rect side) throws ReflectiveOperationException {
+        BlurFillRegion region = new BlurFillRegion(side);
+        Class<?> type = Class.forName("android.view.SurfaceControl$Builder");
+        Object builder = type.getConstructor().newInstance();
+        type.getMethod("setName", String.class).invoke(builder, "FlipDuo continuous blur");
+        type.getMethod("setParent", SurfaceControl.class).invoke(builder, parent);
+        type.getMethod("setEffectLayer").invoke(builder);
+        SurfaceControl blur = (SurfaceControl)type.getMethod("build").invoke(builder);
+        try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
+            tx.setLayer(blur, 2).setCrop(blur, side).setVisibility(blur, false);
+            region.apply(tx, blur);
+            tx.apply();
+            return blur;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            remove(blur);
+            throw error;
+        }
+    }
     static void onDraw(View view, SurfaceControl.Transaction tx) {
         AttachedSurfaceControl root = view.getRootSurfaceControl();
         if (view.isAttachedToWindow() && view.isShown() && view.isHardwareAccelerated()
@@ -124,9 +142,16 @@ final class BlurFillSurface {
     static void clip(SurfaceControl.Transaction tx, SurfaceControl target, SurfaceControl plane, Rect clip, boolean corners)
             throws ReflectiveOperationException {
         tx.setCrop(target, clip).setCrop(plane, clip);
-        // The plane owns the app-edge blur as well as its clear restoration. Hide it as a unit;
-        // a parent surface crop is not a substitute for changing native BlurRegion geometry.
+        // This gate is only for the clear restoration. Native blur bounds are set explicitly.
         tx.setVisibility(plane, corners);
+    }
+    static void clipRegion(SurfaceControl.Transaction tx, SurfaceControl target, SurfaceControl plane, Rect clip,
+                           boolean corners, SurfaceControl blur, BlurFillRegion region) throws ReflectiveOperationException {
+        clip(tx, target, plane, clip, corners);
+        if (blur != null) {
+            tx.setCrop(blur, clip);
+            region.apply(tx, blur);
+        }
     }
     static void remove(SurfaceControl surface) {
         if (surface == null) return;

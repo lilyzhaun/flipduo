@@ -10,11 +10,19 @@ import java.util.List;
 
 /** Uses the running framework's region serializer, not an OS-version-dependent float layout. */
 final class BlurFillRegion {
-    static void apply(SurfaceControl.Transaction tx, SurfaceControl plane, Rect bounds) throws ReflectiveOperationException {
+    private final Method setRegions;
+    private final float[][] encoded;
+
+    BlurFillRegion(Rect bounds) throws ReflectiveOperationException {
+        setRegions = SurfaceControl.Transaction.class.getMethod("setBlurRegions", SurfaceControl.class,
+                float[][].class, List.class, List.class);
+        encoded = rectangle(bounds, 110);
+    }
+
+    void apply(SurfaceControl.Transaction tx, SurfaceControl layer) throws ReflectiveOperationException {
         // The two-argument JNI entry drops the MIUI crop extension (observed cropLTRB=0 on OS4).
-        // Use the system drawable's extended entry, with one region and zero color blend operations.
-        SurfaceControl.Transaction.class.getMethod("setBlurRegions", SurfaceControl.class, float[][].class, List.class, List.class)
-                .invoke(tx, plane, rectangle(bounds, 110), Collections.singletonList(0), Collections.emptyList());
+        // Encode once per geometry; the Shell start transaction and the main looper reuse it.
+        setRegions.invoke(tx, layer, encoded, Collections.singletonList(0), Collections.emptyList());
     }
 
     static float[][] rectangle(Rect bounds, int radius) throws ReflectiveOperationException {

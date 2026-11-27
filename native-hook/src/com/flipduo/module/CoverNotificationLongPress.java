@@ -2,8 +2,11 @@
 package com.flipduo.module;
 
 import android.content.Context;
+import android.graphics.Insets;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.widget.FrameLayout;
 import io.github.libxposed.api.XposedInterface;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
@@ -21,6 +24,7 @@ final class CoverNotificationLongPress {
     private final Class<?> row, stack, menu;
     private final Field expanded, entryRow, modalWindow, modalEntry, menuParent, menuContainer;
     private final Method pinned, headsUp, showingPublic, getEntry, provider, createMenu, buildMenu;
+    private final ModalLayout modalLayout;
     private final ThreadLocal<Decision> decision = new ThreadLocal<>();
     private final WeakHashMap<View, ModalMenu> windows = new WeakHashMap<>();
 
@@ -86,6 +90,7 @@ final class CoverNotificationLongPress {
             }
             return c.proceed();
         });
+        modalLayout = installModalLayout(module, window);
         // Arm dispatch last so a partially installed hook cannot reroute a gesture.
         module.hook(dispatch.method).setExceptionMode(PROTECTIVE).intercept(c -> {
             if (!enabled()) return c.proceed();
@@ -96,6 +101,47 @@ final class CoverNotificationLongPress {
             }
             return c.proceed();
         });
+    }
+
+    private ModalLayout installModalLayout(XposedInterface module, Class<?> window) {
+        try {
+            ModalLayout layout = new ModalLayout(CoverLandscapeShade.field(window, "mModalRow"),
+                    CoverLandscapeShade.field(window, "mShowMenu"), CoverLandscapeShade.field(window, "mSidePaddings"));
+            Method insets = window.getDeclaredMethod("onApplyWindowInsets", WindowInsets.class);
+            module.hook(insets).setExceptionMode(PROTECTIVE).intercept(c -> {
+                Object result = c.proceed();
+                View view = (View)c.getThisObject();
+                ModalMenu state = windows.computeIfAbsent(view, ignored -> new ModalMenu());
+                state.systemBars = ((WindowInsets)c.getArg(0)).getInsetsIgnoringVisibility(WindowInsets.Type.systemBars());
+                fitModalRow(view, state, layout);
+                return result;
+            });
+            return layout;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            NativeLog.warning("Cannot adapt cover notification card width; native layout retained", error);
+            return null;
+        }
+    }
+
+    private void fitModalRow(View window, ModalMenu state, ModalLayout layout) throws IllegalAccessException {
+        Object entry = state.entry();
+        if (entry == null || modalEntry.get(window) != entry) return;
+        if (!enabled() || !NativeModule.config().notificationFullscreen || !layout.showMenu.getBoolean(window)
+                || !CoverPanelInsets.coverUnlocked(window)) {
+            state.restoreRowLayout();
+            return;
+        }
+        View card = (View)layout.row.get(window);
+        if (card == null || !card.isAttachedToWindow() || card.getParent() != window || card == entryRow.get(entry)) return;
+        Insets bars = state.systemBars;
+        if (bars == null) return;
+
+        // The OEM modal window does not clip children to its padding. Expand only the card
+        // through the extra camera space; actions still measure inside the original safe area.
+        int side = layout.sidePaddings.getInt(window);
+        int left = Math.max(0, window.getPaddingLeft() - side - bars.left);
+        int right = Math.max(0, window.getPaddingRight() - side - bars.right);
+        state.fitRowLayout(card, left, right);
     }
 
     private Object openModal(XposedInterface.Chain chain, Method dispatcher) throws Throwable {
@@ -116,11 +162,18 @@ final class CoverNotificationLongPress {
         state = windows.computeIfAbsent(window, ignored -> new ModalMenu());
         WeakReference<Object> previous = state.entry;
         state.entry = new WeakReference<>(entry);
-        try { return chain.proceed(); }
+        Object result;
+        try { result = chain.proceed(); }
         finally {
             // mEntry is published before addMenu, including the deferred first-pre-draw path.
             if (modalEntry.get(window) != entry) state.entry = previous;
         }
+        if (modalLayout != null && modalEntry.get(window) == entry) {
+            CoverNotificationLayout.trackForInsetRefresh(window);
+            if (state.systemBars == null) window.requestApplyInsets();
+            fitModalRow(window, state, modalLayout);
+        }
+        return result;
     }
 
     private Object addMenu(XposedInterface.Chain chain) throws Throwable {
@@ -146,7 +199,10 @@ final class CoverNotificationLongPress {
                 restoreMenu(state);
                 NativeLog.warning("Cannot build the full cover notification menu", error);
             }
-            return chain.proceed();
+            Object result = chain.proceed();
+            // A configuration change can remove/re-add the card without another long press.
+            if (modalLayout != null) fitModalRow(window, state, modalLayout);
+            return result;
         } finally {
             View mounted = (View)menuContainer.get(items);
             if (mounted == null || mounted.getParent() != window) restoreMenu(state);
@@ -202,10 +258,49 @@ final class CoverNotificationLongPress {
         }
     }
 
-    private static final class ModalMenu {
+    private record ModalLayout(Field row, Field showMenu, Field sidePaddings) { }
+
+    private record RowLayout(WeakReference<View> card, FrameLayout.LayoutParams stock, FrameLayout.LayoutParams wide) { }
+
+    private static final class ModalMenu implements View.OnAttachStateChangeListener {
         WeakReference<Object> entry, menu;
+        Insets systemBars;
+        RowLayout rowLayout;
         Object entry() { return entry == null ? null : entry.get(); }
         Object menu() { return menu == null ? null : menu.get(); }
+
+        void fitRowLayout(View card, int cutoutLeft, int cutoutRight) {
+            if (cutoutLeft == 0 && cutoutRight == 0) { restoreRowLayout(); return; }
+            if (rowLayout != null && (rowLayout.card.get() != card || card.getLayoutParams() != rowLayout.wide))
+                restoreRowLayout();
+            if (!(card.getLayoutParams() instanceof FrameLayout.LayoutParams current)) return;
+            FrameLayout.LayoutParams stock = rowLayout == null ? current : rowLayout.stock;
+            // Across the checked ROMs the cloned row is match_parent, with default FrameLayout alignment.
+            if (stock.width != ViewGroup.LayoutParams.MATCH_PARENT || stock.gravity != -1 || stock.isMarginRelative()) return;
+            int left = stock.leftMargin - cutoutLeft, right = stock.rightMargin - cutoutRight;
+            if (current.leftMargin == left && current.rightMargin == right) return;
+            var wide = new FrameLayout.LayoutParams(stock);
+            wide.leftMargin = left;
+            wide.rightMargin = right;
+            if (rowLayout == null) card.addOnAttachStateChangeListener(this);
+            rowLayout = new RowLayout(new WeakReference<>(card), stock, wide);
+            card.setLayoutParams(wide);
+        }
+
+        void restoreRowLayout() {
+            if (rowLayout == null) return;
+            RowLayout previous = rowLayout;
+            rowLayout = null;
+            View card = previous.card.get();
+            if (card == null) return;
+            card.removeOnAttachStateChangeListener(this);
+            if (card.getLayoutParams() == previous.wide) card.setLayoutParams(previous.stock);
+        }
+
+        @Override public void onViewAttachedToWindow(View view) { }
+        @Override public void onViewDetachedFromWindow(View view) {
+            if (rowLayout != null && rowLayout.card.get() == view) restoreRowLayout();
+        }
     }
 
     private record Dispatch(Method method, Class<?> event, Field injector, Field view) {

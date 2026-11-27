@@ -626,7 +626,7 @@ internal fun SettingsPage(store: ControlsStore, c: Controls, appearance: () -> U
                 summary = "解锁后长按通知列表中的通知，显示与内屏相同的系统菜单。首次使用需重载系统界面。",
                 onCheckedChange = { value -> store.update { it.copy(coverNotificationLongPress = value) } })
             SwitchPreference(title = "通知全宽", checked = c.notificationFullscreen,
-                summary = "扩展外屏通知区域，控制中心保持原布局。镜头位置的内容可能被硬件遮住；关闭恢复原生布局。首次需系统界面加载新版。",
+                summary = "扩展外屏通知列表和长按后的通知卡片。镜头可能遮住部分卡片内容，菜单按钮仍避让镜头。首次需系统界面加载新版。",
                 onCheckedChange = { value -> store.update { it.copy(notificationFullscreen = value) } })
             SwitchPreference(title = "隐藏外屏底部遮罩", checked = c.hideCoverBottomGuard,
                 summary = "隐藏底部防误触层，保留原生输入区域；有原生豁免接口的系统还会移除应用底部兼容留白。切换后需重新启动受影响应用；一代OS3暂仅支持前者。",

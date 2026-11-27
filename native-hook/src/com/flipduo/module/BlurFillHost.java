@@ -22,7 +22,7 @@ import java.util.function.Consumer;
 final class BlurFillHost {
     static final String REQUEST = "com.flipduo.module.BLUR_FILL_REQUEST";
     static final String STATE = "com.flipduo.module.BLUR_FILL_STATE";
-    static final int PIPELINE = 9;
+    static final int PIPELINE = 10;
     private final WeakReference<ViewGroup> root;
     private final Context context;
     private final WindowManager windowManager;
@@ -50,25 +50,26 @@ final class BlurFillHost {
     private int sequence, display, rotation, firstRadius, lastRadius;
     private int controlSequence, lastStatus = -1;
     private Rect viewport, body;
-    private SurfaceControl window, gate, appGate, target, plane;
-    private BlurFillMaterial material, extensionMaterial;
+    private SurfaceControl window, gate, appGate, target, plane, continuousBlur;
+    private BlurFillMaterial material;
     private final ArrayList<Retired> retired = new ArrayList<>();
     private final class Retired {
-        final SurfaceControl gate, appGate, target, plane;
-        final BlurFillMaterial material, extensionMaterial;
+        final SurfaceControl gate, appGate, target, plane, continuousBlur;
+        final BlurFillMaterial material;
         final int sequence;
         final boolean sent;
         boolean complete;
-        Retired(SurfaceControl gate, SurfaceControl appGate, SurfaceControl target, SurfaceControl plane, BlurFillMaterial material, BlurFillMaterial extensionMaterial, int sequence, boolean sent) {
+        Retired(SurfaceControl gate, SurfaceControl appGate, SurfaceControl target, SurfaceControl plane,
+                SurfaceControl continuousBlur, BlurFillMaterial material, int sequence, boolean sent) {
             this.gate = gate; this.appGate = appGate;
             this.target = target; this.plane = plane; this.sequence = sequence; this.sent = sent;
             this.material = material;
-            this.extensionMaterial = extensionMaterial;
+            this.continuousBlur = continuousBlur;
         }
         void finish() {
             if (complete) return;
             complete = true; retired.remove(this);
-            if (extensionMaterial != null) extensionMaterial.close();
+            if (continuousBlur != null) continuousBlur.release();
             if (material != null) material.close();
             if (plane != null) plane.release();
             appGate.release();
@@ -174,31 +175,35 @@ final class BlurFillHost {
                 Rect frame = new Rect(0, 0, nextViewport.width(), nextViewport.height());
                 BlurFillSurface.Targets layers = BlurFillSurface.destinations(view, surface, frame);
                 gate = layers.gate; appGate = layers.appGate; target = layers.background; plane = layers.foreground;
-                material = new BlurFillMaterial(view, target, rect, 1, null, changed);
-                Rect extension = BlurFillGeometry.extension(frame.width(), frame.height(), rect);
-                if (!extension.isEmpty()) extensionMaterial = new BlurFillMaterial(view, plane, extension, -1, target, changed);
+                material = new BlurFillMaterial(view, target, rect, changed);
+                if (!BlurFillGeometry.extension(frame.width(), frame.height(), rect).isEmpty()) {
+                    try { continuousBlur = BlurFillSurface.continuousBlur(target, rect); }
+                    catch (ReflectiveOperationException unavailable) {
+                        NativeModule.warning("Continuous blur region unavailable; keeping native side blur", unavailable);
+                    }
+                }
                 display = id; rotation = actualRotation; viewport = nextViewport; body = rect;
                 this.firstRadius = firstRadius; this.lastRadius = lastRadius;
             }
-            if (!material.ready() || extensionMaterial != null && !extensionMaterial.ready()) return false;
+            if (!material.ready()) return false;
             if (!sent && !requestPending) requestOnDraw(view);
             else if (sent && sourceChanged) {
                 Intent control = new Intent(REQUEST).setPackage("com.android.systemui").putExtra("sequence", sequence)
                         .putExtra("control", true).putExtra("retain", !liveSource).putExtra("control_sequence", controlSequence);
                 Bundle binders = new Bundle(); binders.putBinder("owner", owner); control.putExtras(binders);
-                if (!liveSource) context.sendBroadcast(control, StatusWire.PERMISSION);
-                else try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
+                if (!liveSource) {
+                    present();
+                    if (sent) context.sendBroadcast(control, StatusWire.PERMISSION);
+                } else {
                     int expected = sequence, expectedControl = controlSequence;
                     // Commit the local restriction before asking SystemUI to expand. Local gating
                     // is a surface-only change; it must not wait behind another ViewRoot's draw.
-                    tx.addTransactionCommittedListener(context.getMainExecutor(), () -> {
+                    present(() -> {
                         if (wanted && sent && liveSource && sequence == expected && controlSequence == expectedControl)
                             context.sendBroadcast(control, StatusWire.PERMISSION);
                     });
-                    tx.apply();
                 }
             }
-            if (sourceChanged) present(!liveSource);
             return ready;
         } catch (ReflectiveOperationException | RuntimeException error) {
             stop(); NativeModule.warning("Blur-fill destination unavailable; no replacement fill", error); return false;
@@ -217,27 +222,26 @@ final class BlurFillHost {
         present();
         if (wasVisible != visible()) changed.run();
     }
-    private void present() { present(false); }
+    private void present() { present(null); }
     void background(Drawable background) {
         ViewGroup view = root.get(); if (view == null) return;
         if (view.getBackground() != background) view.setBackground(background);
     }
-    private void present(boolean restrict) {
+    private void present(Runnable committed) {
         ViewGroup view = root.get();
         if (!wanted || target == null || !target.isValid() || view == null) return;
         if (!windowManager.isCrossWindowBlurEnabled()) { pauseForBlur(); changed.run(); return; }
-        if (restrict) corners = false;
-        // Native blur regions have their own bounds/crops. The fixed side region cannot invade
-        // the app; Shell hides the separate app-edge material together with the restoration plane.
         try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
-            // Independent parent gates: local gestures cannot be reopened by a stale remote
-            // expansion, and a stale host ACK cannot override Shell's hidden inner plane.
-            boolean extend = ready && corners && liveSource;
+            // FlipHome owns effect visibility; SystemUI owns the continuous effect's region.
+            // A late expansion from Shell cannot make a locally hidden effect visible.
+            boolean extend = ready && corners && liveSource && continuousBlur != null;
             boolean showing = ready && opacity > 0 && view.isShown();
             tx.setCrop(gate, extend ? new Rect(0, 0, viewport.width(), viewport.height()) : body)
                     .setVisibility(gate, showing).setVisibility(appGate, showing && extend);
             tx.setAlpha(target, ready ? opacity : 0).setAlpha(plane, ready ? 1 : 0);
-            if (extensionMaterial != null) extensionMaterial.alpha(tx, opacity);
+            material.visible(tx, showing && !extend);
+            if (continuousBlur != null) tx.setVisibility(continuousBlur, showing && extend);
+            if (committed != null) tx.addTransactionCommittedListener(context.getMainExecutor(), committed::run);
             tx.apply(); // Before resetLauncherForStartGesture proceeds; no pending material redraw.
         } catch (RuntimeException error) {
             stop(); NativeModule.warning("Blur-fill region handoff unavailable; no replacement fill", error);
@@ -257,7 +261,7 @@ final class BlurFillHost {
                 Intent request = new Intent(REQUEST).setPackage("com.android.systemui").putExtra("sequence", sequence)
                         .putExtra("display", display).putExtra("rotation", rotation)
                         .putExtra("destination", new Rect(0, 0, viewport.width(), viewport.height())).putExtra("target", target)
-                        .putExtra("plane", plane).putExtra("viewport", viewport)
+                        .putExtra("plane", plane).putExtra("continuous_blur", continuousBlur).putExtra("viewport", viewport)
                         .putExtra("first_radius", firstRadius).putExtra("last_radius", lastRadius).putExtra("pipeline", PIPELINE)
                         .putExtra("user", android.os.Process.myUserHandle()).putExtra("retain", !liveSource)
                         .putExtra("control_sequence", controlSequence);
@@ -283,9 +287,10 @@ final class BlurFillHost {
     }
     private void releaseTarget() { releaseTarget(false); }
     private void releaseTarget(boolean immediate) {
-        Retired previous = target == null ? null : new Retired(gate, appGate, target, plane, material, extensionMaterial, sequence, sent);
-        material = extensionMaterial = null;
-        sent = ready = requestPending = geometryPending = corners = false; gate = appGate = target = plane = window = null;
+        Retired previous = target == null ? null : new Retired(gate, appGate, target, plane, continuousBlur, material, sequence, sent);
+        material = null;
+        sent = ready = requestPending = geometryPending = corners = false;
+        gate = appGate = target = plane = continuousBlur = window = null;
         sequence++; controlSequence = 0; lastStatus = -1;
         if (previous == null) return;
         retired.add(previous);

@@ -4,7 +4,7 @@
 
 FlipDuo is an LSPosed module and companion settings app for the cover screens of Xiaomi MIX Flip devices.
 
-This repository contains the public production source and build files for **0.7.17 (185)**. The app's existing interface text is preserved in its original language.
+This repository contains the public production source and build files for **0.7.19 (187)**. The app's existing interface text is preserved in its original language.
 
 ## Features
 
@@ -27,7 +27,7 @@ Features depend on the device's firmware and the enabled module scopes. Fullscre
 
 The compatibility targets are MIX Flip (`ruyi`) on HyperOS 3 and MIX Flip 2 (`bixi`) on HyperOS 3 or 4. Firmware-specific behavior requires verification on the corresponding device; these targets are not a guarantee that every feature works on every firmware.
 
-The notification menu option is off by default under **Settings → Cover screen behavior → System shortcuts**. Reload System UI after updating, then long-press a notification in the expanded, unlocked cover shade. The menu paths were checked against all three target ROMs; on-device behavior remains unverified.
+The notification menu option is off by default under **Settings → Cover screen behavior → System shortcuts**. Reload System UI after updating, then long-press a notification in the expanded, unlocked cover shade. With **Full-width notifications** enabled, the card expands while the menu buttons keep their original camera clearance. The menu and layout paths were checked against all three target ROMs.
 
 For regular app layouts, select an app under **Settings → Hide cover-screen state**, grant its LSPosed scope, and reopen the app. The separate Rust Gallery experiment uses package metadata and the available framework interfaces rather than a list of device or Gallery versions. It is off by default, preserves window size and scaling, and does not guarantee access to the full native Gallery home screen. Java Gallery keeps its app-level scope. The Rust experiment and follow-system scaling require the updated module to load in System Framework after a manual device restart.
 
@@ -39,7 +39,7 @@ The 0.7.4 Search and Edit button appearance has user acceptance. The newer searc
 
 Cover detail panels keep their native actions and scrolling, use the display's camera-safe area, and restore the main panel's opacity after returning. Reload System UI to load these changes. The cover-app eligibility switch now bypasses stale interception-cache entries while enabled; this correction has ROM and logic verification, with affected apps on other firmware still awaiting device verification. Its system-framework hooks load after a manual device restart.
 
-Live blur keeps the side fill stable during page transitions and recent-task gestures, aligns corner fill with the side backdrop, and coordinates app-edge restoration with notification animations. Continuous restoration preserves different corner radii where per-corner surface transactions are available. Firmware without that interface retains the legacy restoration path; the correction is not independently verified on that fallback. Reload FlipHome and System UI after updating so both hosts load the matching module version.
+Live blur uses one region across the rounded app corners and the side area while the app is settled. During page changes, recent-task gestures, and notification shade animations, blur is confined to the side area. The clear app edge preserves different corner radii where per-corner transactions are available and uses the existing fallback otherwise. Reload FlipHome and System UI after updating so both hosts load the matching module version.
 
 Framed screenshots support the verified Screenshot 1.6.3.44 and 1.6.3.47 pipelines while retaining the older modern and legacy paths. Unknown future Screenshot builds may require additional compatibility work. Quick restart sends process termination requests; the system restarts hosts as needed, and a sent request does not by itself confirm that the module has loaded.
 
@@ -95,14 +95,14 @@ The public source distribution does not include private signing material, test s
 
 ## Source releases
 
-For **0.7.17 (185)**, use the [complete source tag, `v0.7.17`](https://github.com/lilyzhaun/flipduo/tree/v0.7.17). See the [changelog](CHANGELOG.md#0717) for changes since 0.7.14 and [GitHub Releases](https://github.com/lilyzhaun/flipduo/releases) for published APKs.
+For **0.7.19 (187)**, use the [complete source tag, `v0.7.19`](https://github.com/lilyzhaun/flipduo/tree/v0.7.19). See the [changelog](CHANGELOG.md#0719) for changes since 0.7.17 and [GitHub Releases](https://github.com/lilyzhaun/flipduo/releases) for published APKs.
 
 For the older 0.7.9 (177) APK, use [`v0.7.9-full`](https://github.com/lilyzhaun/flipduo/releases/tag/v0.7.9-full). The earlier `v0.7.9` tag contains only the notification fix on top of 0.7.4.
 
 Update in place to retain app settings. For ADB installation, explicitly use the non-incremental path:
 
 ```sh
-adb install --no-incremental -r flipduo-0.7.17.apk
+adb install --no-incremental -r flipduo-0.7.19.apk
 ```
 
 The public build configuration omits private instrumentation-test dependencies and local SDK paths. It contains the production sources needed to build this version, rather than a byte-for-byte reproduction of a publisher-signed APK.
