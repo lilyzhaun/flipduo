@@ -11,8 +11,8 @@ android {
         applicationId = "com.flipduo.module"
         minSdk = 35
         targetSdk = 36
-        versionCode = 185
-        versionName = "0.7.17"
+        versionCode = 187
+        versionName = "0.7.19"
     }
     buildFeatures { compose = true; buildConfig = true }
     sourceSets["main"].java.srcDir("../native-hook/src")

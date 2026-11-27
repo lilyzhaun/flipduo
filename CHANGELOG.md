@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.19
+
+Changes since 0.7.17:
+
+- Use one continuous live-blur region across the app's rounded corners and the cover side area to smooth the seam. During recent-task gestures, app transitions, or notification shade animations, the blur stays in the side area until the transition settles.
+- Make the long-pressed notification card follow **Full-width notifications**. The native menu actions keep their camera clearance.
+
+Reload FlipHome and System UI after updating so both hosts use the same version. The relevant paths were checked against the MIX Flip HyperOS 3 and MIX Flip 2 HyperOS 3 and 4 ROMs; the HyperOS 3 variants have not been tested on devices for these changes.
+
 ## 0.7.17
 
 Changes since 0.7.14:

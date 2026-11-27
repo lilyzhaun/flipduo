@@ -30,7 +30,7 @@ final class CoverNotificationLayout {
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                     View view = (View) chain.getArg(0);
                     if (!container.isInstance(view)) return chain.proceed();
-                    containers.put(view, true);
+                    trackForInsetRefresh(view);
                     boolean wide = NativeModule.config().notificationFullscreen && CoverPanelInsets.coverUnlocked(view);
                     WindowInsets original = (WindowInsets) chain.getArg(1);
                     // Let the OEM listener rebuild padding and its own ConstraintSet from this copy.
@@ -50,6 +50,7 @@ final class CoverNotificationLayout {
                     return result;
                 });
     }
+    static void trackForInsetRefresh(View view) { containers.put(view, true); }
     static void refresh() {
         for (View view : new ArrayList<>(containers.keySet())) view.requestApplyInsets();
     }

@@ -56,20 +56,26 @@ final class BlurFillSource {
         IBinder.DeathRecipient death;
         int sequence, display, rotation, firstRadius, lastRadius, controlSequence;
         UserHandle user;
-        SurfaceControl target, plane; // Owned background and app-edge gate (material plus clear restoration).
+        SurfaceControl target, plane, continuousBlur; // Owned parcel handles, never the actual task leash.
         Rect destination, viewport, side;
+        BlurFillRegion sideRegion, fullRegion;
         boolean retained;
         private boolean surfacesReleased;
 
         // Shell runs off the SystemUI main looper. SurfaceControl's native-pointer check and
         // JNI use are not atomic with release() on either verified ROM. Keep the request's
-        // two owned handles alive through that JNI call, including a hook holding a stale Request.
+        // owned handles alive through that JNI call, including a hook holding a stale Request.
         synchronized void restrictTransition(SurfaceControl.Transaction transaction) throws ReflectiveOperationException {
-            if (!surfacesReleased) BlurFillSurface.clip(transaction, target, plane, side, false);
+            if (!surfacesReleased) setPresentation(transaction, false);
+        }
+        void setPresentation(SurfaceControl.Transaction transaction, boolean corners) throws ReflectiveOperationException {
+            BlurFillSurface.clipRegion(transaction, target, plane, corners ? destination : side, corners,
+                    continuousBlur, corners ? fullRegion : sideRegion);
         }
         synchronized void releaseSurfaces() {
             if (surfacesReleased) return;
             surfacesReleased = true;
+            if (continuousBlur != null) continuousBlur.release();
             plane.release();
             target.release();
         }
@@ -108,10 +114,10 @@ final class BlurFillSource {
         }
         try { source.shade = BlurFillShade.install(module, loader, source::onShadeChanged); }
         catch (ReflectiveOperationException | RuntimeException error) {
-            NativeModule.warning("Blur-fill notification boundary unavailable; existing task handoff retained", error);
+            NativeModule.warning("Blur-fill notification boundary unavailable; keep side-only presentation", error);
         }
         instance = source;
-        NativeModule.info("Blur-fill v158 source installed; shared sampling order; pipeline=9; notificationBoundary=" + (source.shade != null));
+        NativeModule.info("Blur-fill continuous region installed; pipeline=" + BlurFillHost.PIPELINE + "; notificationBoundary=" + (source.shade != null));
     }
     private void onShadeChanged() {
         Request current = request;
@@ -227,6 +233,7 @@ final class BlurFillSource {
         }
         SurfaceControl target = intent.getParcelableExtra("target", SurfaceControl.class);
         SurfaceControl plane = intent.getParcelableExtra("plane", SurfaceControl.class);
+        SurfaceControl continuousBlur = intent.getParcelableExtra("continuous_blur", SurfaceControl.class);
         Rect destination = intent.getParcelableExtra("destination", Rect.class);
         Rect viewport = intent.getParcelableExtra("viewport", Rect.class);
         int rotation = intent.getIntExtra("rotation", -1), display = intent.getIntExtra("display", -1);
@@ -235,11 +242,13 @@ final class BlurFillSource {
         UserHandle user = intent.getParcelableExtra("user", UserHandle.class);
         if (sequence < 0 || controlSequence < 0 || target == null || !target.isValid() || destination == null || destination.isEmpty()
                 || plane == null || !plane.isValid() || viewport == null || viewport.isEmpty()
+                || continuousBlur != null && !continuousBlur.isValid()
                 || intent.getIntExtra("pipeline", -1) != BlurFillHost.PIPELINE
                 || user == null || rotation < 0 || rotation > 3 || destination.left != 0 || destination.top != 0
                 || viewport.left < 0 || viewport.top < 0 || viewport.right > CoverRotation.width(rotation) || viewport.bottom > CoverRotation.height(rotation)
                 || destination.width() != viewport.width() || destination.height() != viewport.height()
                 || firstRadius < 0 || lastRadius < 0 || firstRadius > CoverGeometry.COLUMN / 2 || lastRadius > CoverGeometry.COLUMN / 2) {
+            if (continuousBlur != null) continuousBlur.release();
             if (target != null) target.release(); if (plane != null) plane.release(); return;
         }
         releaseRequest();
@@ -247,11 +256,20 @@ final class BlurFillSource {
         next.rotation = rotation; next.user = user; next.target = target; next.destination = destination;
         next.plane = plane; next.viewport = viewport; next.firstRadius = firstRadius; next.lastRadius = lastRadius;
         next.side = BlurFillGeometry.destination(rotation, viewport.left, viewport.top, viewport.width(), viewport.height());
+        next.continuousBlur = continuousBlur;
+        if (next.side.isEmpty()) { next.releaseSurfaces(); return; }
+        if (continuousBlur != null) try {
+            next.sideRegion = new BlurFillRegion(next.side);
+            next.fullRegion = new BlurFillRegion(destination);
+        } catch (ReflectiveOperationException unavailable) {
+            continuousBlur.release(); next.continuousBlur = null;
+            NativeModule.warning("Cannot encode continuous blur region; keeping native side blur", unavailable);
+        }
         next.retained = intent.getBooleanExtra("retain", false);
         next.controlSequence = controlSequence;
         next.death = () -> main.post(() -> { if (request == next) releaseRequest(); });
         try { owner.linkToDeath(next.death, 0); }
-        catch (RemoteException error) { target.release(); plane.release(); return; }
+        catch (RemoteException error) { next.releaseSurfaces(); return; }
         request = next; statusSequence = 0; reportedControlSequence = -1; schedule();
         checkedTask = -1;
         if (idle != null) idle.invalidate();
@@ -262,7 +280,9 @@ final class BlurFillSource {
         if (context == null || current == null) return;
         if (!renderingAllowed() || !blurAvailable()) { dropLayers(); report(false); return; }
         DockConfig config = NativeModule.config();
-        if (!current.target.isValid() || !current.plane.isValid()) { releaseRequest(); return; }
+        if (!current.target.isValid() || !current.plane.isValid() || current.continuousBlur != null && !current.continuousBlur.isValid()) {
+            releaseRequest(); return;
+        }
         // The two hosts receive remote preferences independently. Retain the request while SystemUI
         // catches up; its preference callback resumes it. FlipHome explicitly releases on mode exit.
         if (!config.enabled || config.background != CoverBackground.BLUR_FILL) { dropLayers(); report(false); return; }
@@ -314,6 +334,9 @@ final class BlurFillSource {
             if (activeTask == task.taskId && source.equals(activeSource) && BlurFillSurface.same(leash, activeLeash)) {
                 presentation(settled && sceneCommitted, false); return;
             }
+            // Even a task replacement without a Shell animation starts side-only. Restrict the
+            // real blur region and the clear band before attaching the next mirror.
+            presentation(false, false);
             Rect app = BlurFillGeometry.appDestination(source, taskBounds, current.viewport);
             surfaces.show(current.target, current.plane, leash, source, current.destination, current.side, app,
                     current.firstRadius, current.lastRadius, CoverRotation.landscape(current.rotation), command -> main.post(command),
@@ -339,11 +362,18 @@ final class BlurFillSource {
     }
     private void presentation(boolean corners, boolean force) throws ReflectiveOperationException {
         Request current = request;
-        if (current != null && shade != null && shade.blocks(current.display)) corners = false;
-        if (current == null || !force && expanded == corners) return;
-        try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
-            BlurFillSurface.clip(tx, current.target, current.plane, corners ? current.destination : current.side, corners);
-            tx.apply();
+        if (current == null) return;
+        synchronized (current) {
+            // Shell invalidates idle before taking this same lock. Recheck here so a main-thread
+            // callback that previously observed idle cannot widen the submitted start transaction.
+            BlurFillIdle boundary = idle;
+            corners = corners && current.continuousBlur != null && !current.retained && boundary != null && boundary.settled()
+                    && shade != null && !shade.blocks(current.display);
+            if (!force && expanded == corners) return;
+            try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
+                current.setPresentation(tx, corners);
+                tx.apply();
+            }
         }
         expanded = corners;
         if (reported && ready) report(true);

@@ -8,7 +8,7 @@ import android.view.SurfaceControlViewHost;
 import android.view.View;
 import android.view.WindowManager;
 
-/** Fixed-extent native blur. App-edge material is hidden with the restoration plane, not cropped. */
+/** Fixed side-only native blur, ready for FlipHome to reveal at gesture start. */
 final class BlurFillMaterial {
     private final View view;
     private final SurfaceControlViewHost host;
@@ -18,7 +18,7 @@ final class BlurFillMaterial {
     private boolean ready, closed;
     private Exception failure;
 
-    BlurFillMaterial(View owner, SurfaceControl target, Rect bounds, int layer, SurfaceControl samplingPlane, Runnable changed)
+    BlurFillMaterial(View owner, SurfaceControl target, Rect bounds, Runnable changed)
             throws ReflectiveOperationException {
         this.bounds = new Rect(0, 0, bounds.width(), bounds.height());
         view = new View(owner.getContext());
@@ -48,7 +48,7 @@ final class BlurFillMaterial {
                     WindowManager.LayoutParams.TYPE_APPLICATION,
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                     PixelFormat.TRANSLUCENT);
-            params.setTitle(layer < 0 ? "FlipDuo corner material" : "FlipDuo side material");
+            params.setTitle("FlipDuo side material");
             // This overload exists on both verified ROMs; the SDK37 replacement LayoutParams
             // subclass does not exist on SDK36. Use the common signature rather than an SDK guess.
             SurfaceControlViewHost.class.getMethod("setView", View.class, WindowManager.LayoutParams.class)
@@ -57,14 +57,9 @@ final class BlurFillMaterial {
             if (surfacePackage == null) throw new ReflectiveOperationException("Missing windowless blur surface");
             try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
                 tx.reparent(surfacePackage.getSurfaceControl(), target)
-                        .setLayer(surfacePackage.getSurfaceControl(), layer)
+                        .setLayer(surfacePackage.getSurfaceControl(), 1)
                         .setPosition(surfacePackage.getSurfaceControl(), bounds.left, bounds.top)
                         .setVisibility(surfacePackage.getSurfaceControl(), true);
-                // Keep visibility owned by the app-edge gate, but sample alongside the side
-                // material BELOW the controls. Sampling above that window changes the backdrop.
-                if (samplingPlane != null) SurfaceControl.Transaction.class
-                        .getMethod("setRelativeLayer", SurfaceControl.class, SurfaceControl.class, int.class)
-                        .invoke(tx, surfacePackage.getSurfaceControl(), samplingPlane, 2);
                 tx.apply();
             }
         } catch (ReflectiveOperationException | RuntimeException error) {
@@ -76,7 +71,9 @@ final class BlurFillMaterial {
         if (failure != null) throw new ReflectiveOperationException("Windowless blur initialization failed", failure);
         return ready && !closed;
     }
-    void alpha(SurfaceControl.Transaction tx, float opacity) { tx.setAlpha(surfacePackage.getSurfaceControl(), opacity); }
+    void visible(SurfaceControl.Transaction tx, boolean visible) {
+        tx.setVisibility(surfacePackage.getSurfaceControl(), visible);
+    }
     void onDraw(SurfaceControl.Transaction tx) { BlurFillSurface.onDraw(view, tx); }
     void close() {
         if (closed) return;
